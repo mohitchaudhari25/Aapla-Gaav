@@ -1,14 +1,63 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
+import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
-import { DEMO_VILLAGE } from '../../data/village';
+import { supabase } from '../../lib/supabase';
 
 export default function Village() {
   const router = useRouter();
+
+  const [village, setVillage] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchVillage = async () => {
+        setLoading(true);
+        setErrorMsg(null);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('village_id')
+              .eq('id', user.id)
+              .single();
+
+            if (profile?.village_id) {
+              const { data, error } = await supabase
+                .from('villages')
+                .select('*')
+                .eq('id', profile.village_id)
+                .single();
+
+              if (error) {
+                setErrorMsg('गावाची माहिती मिळवण्यात त्रुटी आली.');
+              } else if (data) {
+                setVillage(data);
+              }
+            } else {
+              setErrorMsg('गावाची माहिती उपलब्ध नाही.');
+            }
+          } else {
+            setErrorMsg('कृपया लॉगिन करा.');
+          }
+        } catch (error) {
+          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+          console.error(error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchVillage();
+    }, [])
+  );
 
   const services = [
     { id: '1', title: 'गावातील सूचना', icon: 'megaphone-outline', route: '/notices', color: colors.warning },
@@ -50,24 +99,32 @@ export default function Village() {
         </View>
 
         {/* Basic Village Info */}
-        <View style={styles.card}>
-          {renderInfoRow('गावाचे नाव', DEMO_VILLAGE.name)}
-          <View style={styles.divider} />
-          {renderInfoRow('ग्रामपंचायत', DEMO_VILLAGE.gramPanchayat)}
-          <View style={styles.divider} />
-          {renderInfoRow('तालुका', DEMO_VILLAGE.taluka)}
-          <View style={styles.divider} />
-          {renderInfoRow('जिल्हा', DEMO_VILLAGE.district)}
-          <View style={styles.divider} />
-          {renderInfoRow('राज्य', DEMO_VILLAGE.state)}
-        </View>
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />
+        ) : errorMsg ? (
+          <EmptyState title={errorMsg} />
+        ) : !village ? (
+          <EmptyState title="सध्या गावाची माहिती उपलब्ध नाही." />
+        ) : (
+          <>
+            <View style={styles.card}>
+              {renderInfoRow('गावाचे नाव', village.name)}
+              <View style={styles.divider} />
+              {renderInfoRow('ग्रामपंचायत', village.gram_panchayat || village.gramPanchayat)}
+              <View style={styles.divider} />
+              {renderInfoRow('तालुका', village.taluka)}
+              <View style={styles.divider} />
+              {renderInfoRow('जिल्हा', village.district)}
+              <View style={styles.divider} />
+              {renderInfoRow('राज्य', village.state)}
+            </View>
 
-        {/* Statistics */}
-        <View style={styles.statsContainer}>
-          {renderStatCard('लोकसंख्या', DEMO_VILLAGE.statistics?.population, 'people-outline')}
-          {renderStatCard('कुटुंबे', DEMO_VILLAGE.statistics?.families, 'home-outline')}
-          {renderStatCard('क्षेत्रफळ', DEMO_VILLAGE.statistics?.area, 'map-outline')}
-        </View>
+            {/* Statistics */}
+            <View style={styles.statsContainer}>
+              {renderStatCard('लोकसंख्या', village.population, 'people-outline')}
+              {renderStatCard('कुटुंबे', village.families, 'home-outline')}
+              {renderStatCard('क्षेत्रफळ', village.area, 'map-outline')}
+            </View>
 
         {/* Quick Services */}
         <AppText variant="headingSmall" style={styles.sectionTitle}>महत्त्वाच्या सेवा</AppText>
@@ -88,22 +145,27 @@ export default function Village() {
         </View>
 
         {/* Gram Panchayat Info */}
-        <AppText variant="headingSmall" style={styles.sectionTitle}>ग्रामपंचायत माहिती</AppText>
-        <View style={[styles.card, styles.lastCard]}>
-          <View style={styles.panchayatHeader}>
-            <View style={styles.panchayatIconWrapper}>
-              <Ionicons name="business-outline" size={28} color={colors.primary} />
+        {village && (
+          <>
+            <AppText variant="headingSmall" style={styles.sectionTitle}>ग्रामपंचायत माहिती</AppText>
+            <View style={[styles.card, styles.lastCard]}>
+              <View style={styles.panchayatHeader}>
+                <View style={styles.panchayatIconWrapper}>
+                  <Ionicons name="business-outline" size={28} color={colors.primary} />
+                </View>
+                <View style={styles.panchayatHeaderText}>
+                  <AppText variant="headingSmall">{village.office_name || village.officeName || 'माहिती उपलब्ध नाही'}</AppText>
+                </View>
+              </View>
+              <View style={styles.divider} />
+              {renderInfoRow('कार्यालयीन वेळ', village.timings || village.panchayatInfo?.timings)}
+              <View style={styles.divider} />
+              {renderInfoRow('सुट्टीचा दिवस', village.weekly_off || village.weeklyOff || village.panchayatInfo?.weeklyOff)}
             </View>
-            <View style={styles.panchayatHeaderText}>
-              <AppText variant="headingSmall">{DEMO_VILLAGE.panchayatInfo?.officeName || 'माहिती उपलब्ध नाही'}</AppText>
-            </View>
-          </View>
-          <View style={styles.divider} />
-          {renderInfoRow('कार्यालयीन वेळ', DEMO_VILLAGE.panchayatInfo?.timings)}
-          <View style={styles.divider} />
-          {renderInfoRow('सुट्टीचा दिवस', DEMO_VILLAGE.panchayatInfo?.weeklyOff)}
-        </View>
-        
+          </>
+        )}
+          </>
+        )}
       </ScrollView>
     </ScreenContainer>
   );

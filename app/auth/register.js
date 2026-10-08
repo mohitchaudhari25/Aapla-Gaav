@@ -12,7 +12,7 @@ export default function Register() {
   const router = useRouter();
   
   const [name, setName] = useState('');
-  const [mobile, setMobile] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState({});
@@ -21,7 +21,7 @@ export default function Register() {
   const handleRegister = async () => {
     let newErrors = {};
     if (!name.trim()) newErrors.name = 'पूर्ण नाव आवश्यक आहे';
-    if (!mobile.trim()) newErrors.mobile = 'मोबाईल नंबर आवश्यक आहे';
+    if (!email.trim()) newErrors.email = 'ईमेल आवश्यक आहे';
     if (!password) newErrors.password = 'पासवर्ड आवश्यक आहे';
     if (!confirmPassword) newErrors.confirmPassword = 'पासवर्डची पुष्टी करणे आवश्यक आहे';
     else if (password !== confirmPassword) newErrors.confirmPassword = 'पासवर्ड जुळत नाही';
@@ -35,14 +35,12 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const email = mobile.includes('@') ? mobile : `${mobile}@aapla-gaav.com`;
       const { data, error } = await supabase.auth.signUp({
         email: email,
         password: password,
         options: {
           data: {
             full_name: name,
-            mobile: mobile,
           },
         },
       });
@@ -50,22 +48,24 @@ export default function Register() {
       if (error) {
         setErrors({ form: error.message });
       } else if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: data.user.id,
-              full_name: name,
-              phone_number: mobile,
-              role: 'citizen'
-            }
-          ]);
+        if (data.session) {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert([
+              {
+                id: data.user.id,
+                full_name: name,
+                phone_number: null,
+                role: 'citizen'
+              }
+            ]);
 
-        if (profileError) {
-          setErrors({ form: `प्रोफाइल तयार करताना त्रुटी: ${profileError.message}` });
-        } else {
-          router.replace('/auth/login');
+          if (profileError) {
+            setErrors({ form: `प्रोफाइल तयार करताना त्रुटी: ${profileError.message}` });
+            return;
+          }
         }
+        router.replace('/auth/login');
       }
     } catch (err) {
       setErrors({ form: 'काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.' });
@@ -111,16 +111,16 @@ export default function Register() {
             />
 
             <AppInput 
-              label="मोबाईल नंबर"
-              placeholder="उदा. 9876543210"
-              value={mobile}
+              label="ईमेल"
+              placeholder="उदा. user@example.com"
+              value={email}
               onChangeText={(text) => {
-                setMobile(text);
-                if (errors.mobile) setErrors({ ...errors, mobile: null });
+                setEmail(text);
+                if (errors.email) setErrors({ ...errors, email: null });
                 if (errors.form) setErrors({ ...errors, form: null });
               }}
-              error={errors.mobile}
-              keyboardType="phone-pad"
+              error={errors.email}
+              keyboardType="email-address"
               autoCapitalize="none"
             />
 

@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import EmptyState from '../../components/common/EmptyState';
@@ -7,7 +7,7 @@ import ComplaintCard from '../../components/cards/ComplaintCard';
 import AppText from '../../components/ui/AppText';
 import AppButton from '../../components/ui/AppButton';
 import { colors, spacing, radius } from '../../constants';
-import { DEMO_COMPLAINTS } from '../../data/complaints';
+import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
 const TIMELINE_STAGES = [
@@ -21,14 +21,59 @@ export default function ComplaintDetails() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
-  const complaint = DEMO_COMPLAINTS.find((c) => c.id === id);
+  const [complaint, setComplaint] = useState(null);
+  const [updates, setUpdates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  if (!complaint) {
+  useEffect(() => {
+    const fetchDetails = async () => {
+      try {
+        setLoading(true);
+        const { data: complaintData, error: complaintError } = await supabase
+          .from('complaints')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (complaintError) throw complaintError;
+        setComplaint(complaintData);
+
+        const { data: updatesData, error: updatesError } = await supabase
+          .from('complaint_updates')
+          .select('*')
+          .eq('complaint_id', id)
+          .order('created_at', { ascending: true });
+
+        if (updatesError) throw updatesError;
+        setUpdates(updatesData || []);
+      } catch (err) {
+        console.error(err);
+        setError('माहिती लोड करताना त्रुटी आली.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchDetails();
+    }
+  }, [id]);
+
+  if (loading) {
+    return (
+      <ScreenContainer style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </ScreenContainer>
+    );
+  }
+
+  if (error || !complaint) {
     return (
       <ScreenContainer>
         <EmptyState 
           title="तक्रार सापडली नाही."
-          description="कृपया परत जा आणि पुन्हा प्रयत्न करा."
+          description={error || "कृपया परत जा आणि पुन्हा प्रयत्न करा."}
           buttonTitle="माझ्या तक्रारींकडे परत जा"
           onButtonPress={() => router.back()}
         />
@@ -36,8 +81,11 @@ export default function ComplaintDetails() {
     );
   }
 
-  const currentStatus = complaint.status.trim();
+  const currentStatus = complaint.status?.trim() || 'प्राप्त';
   const activeStageIndex = TIMELINE_STAGES.map(s => s.triggers.includes(currentStatus)).lastIndexOf(true);
+  const formattedDate = complaint.created_at 
+    ? new Date(complaint.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) 
+    : (complaint.date || '');
 
   return (
     <ScreenContainer useSafeArea>
@@ -54,7 +102,7 @@ export default function ComplaintDetails() {
           id={complaint.id}
           category={complaint.category}
           status={complaint.status}
-          date={complaint.date}
+          date={formattedDate}
           style={styles.cardOverrides}
         />
 
@@ -66,6 +114,29 @@ export default function ComplaintDetails() {
             </AppText>
           </View>
         </View>
+
+        {updates.length > 0 && (
+          <View style={styles.section}>
+            <AppText variant="headingSmall" style={styles.sectionTitle}>अपडेट इतिहास</AppText>
+            {updates.map((update) => (
+              <View key={update.id} style={[styles.infoBox, { marginBottom: spacing.sm }]}>
+                {update.status && (
+                  <AppText variant="bodyMedium" style={{ fontWeight: 'bold', color: colors.primary, marginBottom: 2 }}>
+                    {update.status}
+                  </AppText>
+                )}
+                {update.description && (
+                  <AppText variant="bodyMedium" style={styles.descriptionText}>
+                    {update.description}
+                  </AppText>
+                )}
+                <AppText variant="bodySmall" style={{ color: colors.secondaryText, marginTop: 4 }}>
+                  {new Date(update.created_at).toLocaleString('en-GB')}
+                </AppText>
+              </View>
+            ))}
+          </View>
+        )}
 
         <View style={styles.section}>
           <AppText variant="headingSmall" style={styles.sectionTitle}>तक्रार सद्यस्थिती</AppText>
@@ -123,6 +194,11 @@ export default function ComplaintDetails() {
 }
 
 const styles = StyleSheet.create({
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   scrollContent: {
     paddingBottom: spacing.xxl,
   },

@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
@@ -8,15 +8,47 @@ import AppButton from '../../components/ui/AppButton';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
 
-const DEMO_USER = {
-  name: "मोहन पाटील",
-  mobile: "9876543210",
-  village: "आपलं गाव",
-  language: "Marathi"
-};
-
 export default function Profile() {
   const router = useRouter();
+  const [userProfile, setUserProfile] = useState(null);
+  const [villageName, setVillageName] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchProfile = async () => {
+        setLoading(true);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', user.id)
+              .single();
+
+            if (profile) {
+              setUserProfile(profile);
+              if (profile.village_id) {
+                const { data: village } = await supabase
+                  .from('villages')
+                  .select('name')
+                  .eq('id', profile.village_id)
+                  .single();
+                if (village) setVillageName(village.name);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching profile:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchProfile();
+    }, [])
+  );
 
   const handleEditProfile = () => {
     Alert.alert("प्रोफाइल संपादित करा", "ही सुविधा लवकरच उपलब्ध होईल.");
@@ -62,23 +94,29 @@ export default function Profile() {
         
         {/* User Info Card */}
         <View style={styles.userCard}>
-          <View style={styles.avatarWrapper}>
-            <AppText variant="headingLarge" style={styles.avatarText}>
-              {DEMO_USER.name ? DEMO_USER.name.charAt(0) : '?'}
-            </AppText>
-          </View>
-          <AppText variant="headingMedium" style={styles.userName}>
-            {DEMO_USER.name || 'माहिती उपलब्ध नाही'}
-          </AppText>
-          <AppText variant="bodyMedium" style={styles.userInfo}>
-            {DEMO_USER.mobile || 'माहिती उपलब्ध नाही'}
-          </AppText>
-          <View style={styles.villageBadge}>
-            <Ionicons name="location" size={14} color={colors.primary} />
-            <AppText variant="label" style={styles.villageText}>
-              {DEMO_USER.village || 'माहिती उपलब्ध नाही'}
-            </AppText>
-          </View>
+          {loading ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : (
+            <>
+              <View style={styles.avatarWrapper}>
+                <AppText variant="headingLarge" style={styles.avatarText}>
+                  {userProfile?.full_name ? userProfile.full_name.charAt(0) : '?'}
+                </AppText>
+              </View>
+              <AppText variant="headingMedium" style={styles.userName}>
+                {userProfile?.full_name || 'माहिती उपलब्ध नाही'}
+              </AppText>
+              <AppText variant="bodyMedium" style={styles.userInfo}>
+                {userProfile?.phone_number || 'माहिती उपलब्ध नाही'}
+              </AppText>
+              <View style={styles.villageBadge}>
+                <Ionicons name="location" size={14} color={colors.primary} />
+                <AppText variant="label" style={styles.villageText}>
+                  {villageName || 'माहिती उपलब्ध नाही'}
+                </AppText>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Options List */}

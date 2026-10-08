@@ -1,30 +1,67 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
 import NotificationCard from '../../components/cards/NotificationCard';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing } from '../../constants';
-import { DEMO_NOTIFICATIONS } from '../../data/notifications';
+import { supabase } from '../../lib/supabase';
 
 export default function Notifications() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState(DEMO_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
 
-  const handleNotificationPress = (notification) => {
-    // Mark as read locally
-    setNotifications(prev => prev.map(n => 
-      n.id === notification.id ? { ...n, isRead: true } : n
-    ));
+  useFocusEffect(
+    useCallback(() => {
+      fetchNotifications();
+    }, [])
+  );
 
-    // Navigate to respective screens based on type
+  const fetchNotifications = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          setErrorMsg('सूचना मिळवण्यात त्रुटी आली.');
+        } else if (data) {
+          setNotifications(data);
+        }
+      } else {
+        setErrorMsg('कृपया लॉगिन करा.');
+      }
+    } catch (error) {
+      setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNotificationPress = async (notification) => {
+    if (!notification.is_read) {
+      setNotifications(prev => prev.map(n => 
+        n.id === notification.id ? { ...n, is_read: true } : n
+      ));
+      await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', notification.id);
+    }
+
     switch(notification.type) {
       case 'complaint':
-        // If we had an exact ID mapping, we could pass it. Routing to the tab for now, or if a general route exists.
-        // As per instructions, "Complaint Details" can be routed if route exists. But we don't have the specific ID mapping here.
-        // Let's assume it routes to My Complaints for simplicity, or details with a demo ID.
         router.push('/(tabs)/complaints');
         break;
       case 'notice':
@@ -39,11 +76,23 @@ export default function Notifications() {
     }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+  const markAllAsRead = async () => {
+    const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
+    if (unreadIds.length > 0) {
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .eq('user_id', user.id)
+          .in('id', unreadIds);
+      }
+    }
   };
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   return (
     <ScreenContainer useSafeArea>
@@ -62,7 +111,11 @@ export default function Notifications() {
         )}
       </View>
 
-      {(!notifications || notifications.length === 0) ? (
+      {loading ? (
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />
+      ) : errorMsg ? (
+        <EmptyState title={errorMsg} />
+      ) : (!notifications || notifications.length === 0) ? (
         <EmptyState 
           title="सध्या कोणत्याही नवीन सूचना नाहीत." 
         />
@@ -73,9 +126,9 @@ export default function Notifications() {
               key={notification.id}
               type={notification.type}
               title={notification.title}
-              date={notification.date}
+              date={notification.created_at || notification.date}
               message={notification.message}
-              isRead={notification.isRead}
+              isRead={notification.is_read}
               onPress={() => handleNotificationPress(notification)}
             />
           ))}

@@ -1,20 +1,61 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
 import ProjectCard from '../../components/cards/ProjectCard';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
-import { DEMO_PROJECTS } from '../../data/projects';
+import { supabase } from '../../lib/supabase';
 
 export default function Projects() {
   const router = useRouter();
 
-  const totalProjects = DEMO_PROJECTS?.length || 0;
-  const ongoingProjects = DEMO_PROJECTS?.filter(p => p.status === 'चालू').length || 0;
-  const completedProjects = DEMO_PROJECTS?.filter(p => p.status === 'पूर्ण').length || 0;
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchProjects = async () => {
+        setLoading(true);
+        setErrorMsg(null);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('village_id')
+              .eq('id', user.id)
+              .single();
+              
+            let query = supabase.from('projects').select('*');
+            if (profile?.village_id) {
+              query = query.eq('village_id', profile.village_id);
+            }
+            const { data, error } = await query;
+            if (error) {
+              setErrorMsg('विकास कामाची माहिती मिळवण्यात त्रुटी आली.');
+            } else if (data) {
+              setProjects(data);
+            }
+          }
+        } catch (error) {
+          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+          console.error(error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      fetchProjects();
+    }, [])
+  );
+
+  const totalProjects = projects?.length || 0;
+  const ongoingProjects = projects?.filter(p => p.status === 'चालू').length || 0;
+  const completedProjects = projects?.filter(p => p.status === 'पूर्ण').length || 0;
 
   return (
     <ScreenContainer useSafeArea>
@@ -47,18 +88,22 @@ export default function Projects() {
         </View>
       )}
 
-      {totalProjects === 0 ? (
+      {loading ? (
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xxl }} />
+      ) : errorMsg ? (
+        <EmptyState title={errorMsg} />
+      ) : totalProjects === 0 ? (
         <EmptyState 
           title="सध्या कोणतीही विकास कामे उपलब्ध नाहीत." 
         />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {DEMO_PROJECTS.map((project) => (
+          {projects.map((project) => (
             <ProjectCard 
               key={project.id}
               name={project.name}
               budget={project.budget}
-              spent={project.spent}
+              spent={project.amount_spent}
               progress={project.progress}
               status={project.status}
               onPress={() => router.push({ pathname: '/projects/details', params: { id: project.id } })}

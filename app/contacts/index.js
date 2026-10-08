@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
@@ -8,12 +8,59 @@ import ContactCard from '../../components/cards/ContactCard';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing } from '../../constants';
 import { DEMO_CONTACTS } from '../../data/contacts';
+import { supabase } from '../../lib/supabase';
 
 export default function Contacts() {
   const router = useRouter();
 
   const emergencyContacts = DEMO_CONTACTS?.filter(c => c.type === 'emergency') || [];
-  const villageContacts = DEMO_CONTACTS?.filter(c => c.type === 'village') || [];
+  const [villageContacts, setVillageContacts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchContacts = async () => {
+        setLoading(true);
+        setErrorMsg(null);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('village_id')
+              .eq('id', user.id)
+              .single();
+
+            if (profile?.village_id) {
+              const { data, error } = await supabase
+                .from('contacts')
+                .select('*')
+                .eq('village_id', profile.village_id)
+                .eq('type', 'village'); // optional depending on if we have types
+
+              if (error) {
+                setErrorMsg('संपर्क माहिती मिळवण्यात त्रुटी आली.');
+              } else if (data) {
+                setVillageContacts(data);
+              }
+            } else {
+               setVillageContacts([]);
+            }
+          } else {
+             setErrorMsg('कृपया लॉगिन करा.');
+          }
+        } catch (error) {
+          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+          console.error(error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchContacts();
+    }, [])
+  );
 
   return (
     <ScreenContainer useSafeArea>
@@ -27,7 +74,11 @@ export default function Contacts() {
         </View>
       </View>
 
-      {(!DEMO_CONTACTS || DEMO_CONTACTS.length === 0) ? (
+      {loading ? (
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />
+      ) : errorMsg ? (
+        <EmptyState title={errorMsg} />
+      ) : (emergencyContacts.length === 0 && villageContacts.length === 0) ? (
         <EmptyState title="सध्या कोणतीही संपर्क माहिती उपलब्ध नाही." />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -54,9 +105,10 @@ export default function Contacts() {
                 <ContactCard 
                   key={contact.id}
                   name={contact.name}
-                  role={contact.role}
+                  role={contact.role || contact.designation}
                   phone={contact.phone}
-                  type={contact.type}
+                  email={contact.email}
+                  type={contact.type || 'village'}
                 />
               ))}
             </View>

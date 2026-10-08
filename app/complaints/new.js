@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
 import AppInput from '../../components/ui/AppInput';
 import AppButton from '../../components/ui/AppButton';
 import { colors, spacing, radius } from '../../constants';
-import { DEMO_COMPLAINTS } from '../../data/complaints';
+import { supabase } from '../../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
 const CATEGORIES = [
@@ -22,6 +22,7 @@ export default function NewComplaint() {
   const [location, setLocation] = useState('');
   
   const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
 
   const validate = () => {
     let valid = true;
@@ -44,23 +45,68 @@ export default function NewComplaint() {
     return valid;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (validate()) {
-      const newId = `AG-2026-00${DEMO_COMPLAINTS.length + 1}`;
-      
-      const newComplaint = {
-        id: newId,
-        category: category,
-        title: title.trim(),
-        description: description.trim(),
-        location: location.trim(),
-        date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-        status: 'प्राप्त'
-      };
-      
-      DEMO_COMPLAINTS.unshift(newComplaint); // Add to the top of the list
-      
-      router.replace({ pathname: '/complaints/success', params: { id: newId } });
+      setLoading(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          Alert.alert("Error", "You must be logged in.");
+          setLoading(false);
+          return;
+        }
+
+        // Ensure user profile exists
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError && profileError.code === 'PGRST116') {
+          // Profile not found, create a basic one
+          const { error: insertProfileError } = await supabase
+            .from('profiles')
+            .insert([
+              {
+                id: user.id,
+                full_name: user.user_metadata?.full_name || 'Citizen',
+                role: 'citizen'
+              }
+            ]);
+            
+          if (insertProfileError) {
+            console.error('Failed to create profile:', insertProfileError);
+            Alert.alert("Error", "प्रोफाइल तयार करताना त्रुटी आली.");
+            setLoading(false);
+            return;
+          }
+        }
+
+        const finalDescription = `[प्रकार: ${category}] ${location ? '[ठिकाण: ' + location.trim() + ']\n' : ''}${description.trim()}`;
+
+        const { data, error } = await supabase
+          .from('complaints')
+          .insert([
+            {
+              user_id: user.id,
+              title: title.trim(),
+              description: finalDescription,
+              status: 'प्राप्त'
+            }
+          ])
+          .select();
+
+        if (error) throw error;
+        
+        const newId = data[0]?.id;
+        router.replace({ pathname: '/complaints/success', params: { id: newId } });
+      } catch (error) {
+        Alert.alert("Error", "तक्रार नोंदवताना त्रुटी आली. कृपया पुन्हा प्रयत्न करा.");
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -141,9 +187,10 @@ export default function NewComplaint() {
           />
 
           <AppButton 
-            title="तक्रार नोंदवा" 
+            title={loading ? "प्रक्रिया चालू आहे..." : "तक्रार नोंदवा"} 
             onPress={handleSubmit} 
             style={styles.submitButton}
+            disabled={loading}
           />
 
         </ScrollView>

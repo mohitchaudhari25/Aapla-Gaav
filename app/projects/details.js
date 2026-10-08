@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
@@ -7,7 +7,7 @@ import AppText from '../../components/ui/AppText';
 import AppButton from '../../components/ui/AppButton';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
-import { DEMO_PROJECTS } from '../../data/projects';
+import { supabase } from '../../lib/supabase';
 
 const formatCurrency = (amount) => {
   if (amount == null) return '₹०';
@@ -31,7 +31,68 @@ export default function ProjectDetails() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
-  const project = DEMO_PROJECTS?.find(p => p.id === id);
+  const [project, setProject] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  useEffect(() => {
+    const fetchProject = async () => {
+      setLoading(true);
+      setErrorMsg(null);
+      try {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('id', id)
+          .single();
+          
+        if (error) {
+          setErrorMsg('विकास कामाची माहिती मिळवण्यात त्रुटी आली.');
+        } else if (data) {
+          setProject(data);
+        }
+      } catch (err) {
+        setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    if (id) {
+      fetchProject();
+    }
+  }, [id]);
+
+  if (loading) {
+    return (
+      <ScreenContainer useSafeArea>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xxl }} />
+      </ScreenContainer>
+    );
+  }
+
+  if (errorMsg) {
+    return (
+      <ScreenContainer useSafeArea>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+        <EmptyState 
+          title={errorMsg} 
+          buttonTitle="विकास कामांकडे परत जा"
+          onButtonPress={() => router.push('/projects')}
+        />
+      </ScreenContainer>
+    );
+  }
 
   if (!project) {
     return (
@@ -50,7 +111,7 @@ export default function ProjectDetails() {
     );
   }
 
-  const remaining = (project.budget || 0) - (project.spent || 0);
+  const remaining = (project.budget || 0) - (project.amount_spent || 0);
   const statusColor = getStatusColor(project.status);
 
   return (
@@ -69,6 +130,11 @@ export default function ProjectDetails() {
         {/* Project Summary */}
         <View style={styles.summaryCard}>
           <AppText variant="headingMedium" style={styles.projectName}>{project.name}</AppText>
+          {project.description ? (
+            <AppText variant="bodyMedium" style={{ color: colors.secondaryText, marginBottom: spacing.md }}>
+              {project.description}
+            </AppText>
+          ) : null}
           
           <View style={styles.statusRow}>
             <AppText variant="bodyMedium" style={styles.statusLabel}>स्थिती:</AppText>
@@ -101,7 +167,7 @@ export default function ProjectDetails() {
           
           <View style={styles.financeRow}>
             <AppText variant="bodyMedium" style={styles.financeLabel}>आतापर्यंत खर्च:</AppText>
-            <AppText variant="headingSmall" style={[styles.financeValue, { color: colors.error }]}>{formatCurrency(project.spent)}</AppText>
+            <AppText variant="headingSmall" style={[styles.financeValue, { color: colors.error }]}>{formatCurrency(project.amount_spent)}</AppText>
           </View>
           <View style={styles.divider} />
 
@@ -116,12 +182,12 @@ export default function ProjectDetails() {
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
             <AppText variant="label" style={styles.infoLabel}>सुरुवात दिनांक</AppText>
-            <AppText variant="bodyMedium" style={styles.infoValue}>माहिती उपलब्ध नाही</AppText>
+            <AppText variant="bodyMedium" style={styles.infoValue}>{project.start_date ? new Date(project.start_date).toLocaleDateString('en-GB') : 'माहिती उपलब्ध नाही'}</AppText>
           </View>
           <View style={styles.divider} />
           <View style={styles.infoRow}>
             <AppText variant="label" style={styles.infoLabel}>अपेक्षित पूर्णत्व</AppText>
-            <AppText variant="bodyMedium" style={styles.infoValue}>माहिती उपलब्ध नाही</AppText>
+            <AppText variant="bodyMedium" style={styles.infoValue}>{project.end_date ? new Date(project.end_date).toLocaleDateString('en-GB') : 'माहिती उपलब्ध नाही'}</AppText>
           </View>
         </View>
 

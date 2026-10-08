@@ -1,12 +1,12 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
-import { DEMO_PROJECTS } from '../../data/projects';
+import { supabase } from '../../lib/supabase';
 
 const formatCurrency = (amount) => {
   if (amount == null) return '₹०';
@@ -16,26 +16,56 @@ const formatCurrency = (amount) => {
 export default function VillageFunds() {
   const router = useRouter();
 
-  if (!DEMO_PROJECTS || DEMO_PROJECTS.length === 0) {
-    return (
-      <ScreenContainer useSafeArea>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <View style={styles.headerTextContainer}>
-            <AppText variant="headingMedium">गावाचा पैसा कुठे खर्च होतो?</AppText>
-          </View>
-        </View>
-        <EmptyState title="सध्या निधीची माहिती उपलब्ध नाही." />
-      </ScreenContainer>
-    );
-  }
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
 
-  const totalBudget = DEMO_PROJECTS.reduce((sum, p) => sum + (p.budget || 0), 0);
-  const totalSpent = DEMO_PROJECTS.reduce((sum, p) => sum + (p.spent || 0), 0);
-  const remaining = totalBudget - totalSpent;
-  const spendingPercentage = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
+  useFocusEffect(
+    useCallback(() => {
+      const fetchFunds = async () => {
+        setLoading(true);
+        setErrorMsg(null);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('village_id')
+              .eq('id', user.id)
+              .single();
+              
+            if (profile?.village_id) {
+              const { data, error } = await supabase
+                .from('fund_transactions')
+                .select('*')
+                .eq('village_id', profile.village_id)
+                .order('transaction_date', { ascending: false });
+                
+              if (error) {
+                setErrorMsg('निधीची माहिती मिळवण्यात त्रुटी आली.');
+              } else if (data) {
+                setTransactions(data);
+              }
+            } else {
+               setTransactions([]);
+            }
+          }
+        } catch (error) {
+          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+          console.error(error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      fetchFunds();
+    }, [])
+  );
+
+  const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
+  const totalSpent = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+  const remaining = totalIncome - totalSpent;
+  const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
 
   return (
     <ScreenContainer useSafeArea>
@@ -54,14 +84,14 @@ export default function VillageFunds() {
         {/* Total Funds Summary */}
         <View style={styles.summaryCard}>
           <View style={styles.mainAmountContainer}>
-            <AppText variant="label" style={styles.mainAmountLabel}>एकूण निधी</AppText>
-            <AppText variant="headingLarge" style={styles.mainAmount}>{formatCurrency(totalBudget)}</AppText>
+            <AppText variant="label" style={styles.mainAmountLabel}>एकूण निधी (Income)</AppText>
+            <AppText variant="headingLarge" style={styles.mainAmount}>{formatCurrency(totalIncome)}</AppText>
           </View>
 
           <View style={styles.progressContainer}>
             <View style={styles.progressHeader}>
               <AppText variant="label" style={styles.progressLabel}>खर्च: {spendingPercentage.toFixed(0)}%</AppText>
-              <AppText variant="label" style={styles.progressLabel}>{formatCurrency(totalSpent)} / {formatCurrency(totalBudget)}</AppText>
+              <AppText variant="label" style={styles.progressLabel}>{formatCurrency(totalSpent)} / {formatCurrency(totalIncome)}</AppText>
             </View>
             <View style={styles.progressBarBg}>
               <View style={[styles.progressBarFill, { width: `${spendingPercentage}%` }]} />
@@ -86,38 +116,38 @@ export default function VillageFunds() {
           </View>
         </View>
 
-        <AppText variant="headingSmall" style={styles.sectionTitle}>विकास कामे खर्च</AppText>
+        <AppText variant="headingSmall" style={styles.sectionTitle}>निधी व्यवहार (Transactions)</AppText>
         
-        {DEMO_PROJECTS.map((project) => (
-          <TouchableOpacity 
-            key={project.id}
-            style={styles.projectCard}
-            onPress={() => router.push({ pathname: '/projects/details', params: { id: project.id } })}
-            activeOpacity={0.7}
-          >
-            <View style={styles.projectHeader}>
-              <View style={styles.projectIconWrapper}>
-                <Ionicons name="construct-outline" size={20} color={colors.primary} />
+        {loading ? (
+          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />
+        ) : errorMsg ? (
+          <EmptyState title={errorMsg} />
+        ) : transactions.length === 0 ? (
+          <EmptyState title="सध्या निधीची माहिती उपलब्ध नाही." />
+        ) : (
+          transactions.map((tx) => (
+            <View 
+              key={tx.id}
+              style={styles.projectCard}
+            >
+              <View style={styles.projectHeader}>
+                <View style={[styles.projectIconWrapper, { backgroundColor: tx.type === 'income' ? colors.success + '20' : colors.error + '20' }]}>
+                  <Ionicons name={tx.type === 'income' ? 'arrow-down-outline' : 'arrow-up-outline'} size={20} color={tx.type === 'income' ? colors.success : colors.error} />
+                </View>
+                <AppText variant="headingSmall" style={styles.projectName}>{tx.description}</AppText>
               </View>
-              <AppText variant="headingSmall" style={styles.projectName}>{project.name}</AppText>
-              <Ionicons name="chevron-forward" size={20} color={colors.secondaryText} />
+              
+              <View style={styles.projectAmounts}>
+                <AppText variant="bodyMedium" style={[styles.projectSpent, { color: tx.type === 'income' ? colors.success : colors.error }]}>
+                  {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                </AppText>
+                <AppText variant="label" style={styles.projectBudget}>
+                  {new Date(tx.transaction_date).toLocaleDateString('en-GB')}
+                </AppText>
+              </View>
             </View>
-            
-            <View style={styles.projectAmounts}>
-              <AppText variant="bodyMedium" style={styles.projectSpent}>{formatCurrency(project.spent)} खर्च</AppText>
-              <AppText variant="label" style={styles.projectBudget}>एकूण: {formatCurrency(project.budget)}</AppText>
-            </View>
-            
-            <View style={styles.projectProgressBg}>
-              <View 
-                style={[
-                  styles.projectProgressFill, 
-                  { width: `${project.budget > 0 ? Math.min((project.spent / project.budget) * 100, 100) : 0}%` }
-                ]} 
-              />
-            </View>
-          </TouchableOpacity>
-        ))}
+          ))
+        )}
 
       </ScrollView>
     </ScreenContainer>

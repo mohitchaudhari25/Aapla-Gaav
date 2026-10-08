@@ -7,7 +7,8 @@
     "scheme": "aapla-gaav-citizen",
     "plugins": [
       "expo-router",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-font"
     ],
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -20,10 +21,17 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "package": "com.anonymous.aaplagaavcitizen"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "757eddf7-9f95-4092-8498-1ed6f903474c"
+      }
     }
   }
 }

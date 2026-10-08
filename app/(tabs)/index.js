@@ -1,15 +1,72 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Platform, StatusBar } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Platform, StatusBar, ActivityIndicator } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../../constants';
 import AppText from '../../components/ui/AppText';
 import NoticeCard from '../../components/cards/NoticeCard';
-import { DEMO_NOTICES } from '../../data/notices';
-import { DEMO_PROJECTS } from '../../data/projects';
+import { supabase } from '../../lib/supabase';
 
 export default function Home() {
   const router = useRouter();
+  const [notices, setNotices] = useState([]);
+  const [loadingNotices, setLoadingNotices] = useState(true);
+  const [fundsData, setFundsData] = useState({ totalIncome: 0, totalSpent: 0, remaining: 0, spendingPercentage: 0 });
+  const [loadingFunds, setLoadingFunds] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchNoticesAndFunds = async () => {
+        try {
+          setLoadingNotices(true);
+          setLoadingFunds(true);
+
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('village_id')
+              .eq('id', user.id)
+              .single();
+
+            if (profile?.village_id) {
+              const { data: noticesData } = await supabase
+                .from('notices')
+                .select('*')
+                .eq('status', 'published')
+                .eq('village_id', profile.village_id) // Assuming we only want notices for their village
+                .order('created_at', { ascending: false })
+                .limit(2);
+
+              if (noticesData) {
+                setNotices(noticesData);
+              }
+
+              const { data: fundsData } = await supabase
+                .from('fund_transactions')
+                .select('type, amount')
+                .eq('village_id', profile.village_id);
+
+              if (fundsData) {
+                const totalIncome = fundsData.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
+                const totalSpent = fundsData.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+                const remaining = totalIncome - totalSpent;
+                const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
+                setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage });
+              }
+            }
+          }
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingNotices(false);
+          setLoadingFunds(false);
+        }
+      };
+
+      fetchNoticesAndFunds();
+    }, [])
+  );
 
   // Quick Services data
   const quickServices = [
@@ -18,9 +75,6 @@ export default function Home() {
     { id: '3', title: 'माझं गाव', icon: 'business-outline', route: '/village', color: colors.primary },
     { id: '4', title: 'विकास कामे', icon: 'construct-outline', route: '/projects', color: '#8E24AA' },
   ];
-
-  // Notices data
-  const notices = DEMO_NOTICES.slice(0, 2);
 
 
   return (
@@ -43,14 +97,14 @@ export default function Home() {
       </View>
 
       <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* Quick Services Section */}
         <View style={styles.section}>
           <AppText variant="headingSmall" style={[styles.sectionTitle, { marginBottom: spacing.md }]}>त्वरित सेवा</AppText>
           <View style={styles.quickServicesGrid}>
             {quickServices.map((service) => (
-              <TouchableOpacity 
-                key={service.id} 
+              <TouchableOpacity
+                key={service.id}
                 style={styles.serviceCard}
                 onPress={() => router.push(service.route)}
                 activeOpacity={0.7}
@@ -72,15 +126,29 @@ export default function Home() {
               <AppText variant="label" style={styles.seeAllText}>सर्व पहा</AppText>
             </TouchableOpacity>
           </View>
-          
-          {notices.map((notice) => (
-            <NoticeCard 
-              key={notice.id}
-              title={notice.title}
-              date={notice.date}
-              description={notice.description}
-            />
-          ))}
+
+          {loadingNotices ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
+          ) : notices.length === 0 ? (
+            <AppText variant="bodyMedium" style={{ color: colors.secondaryText, textAlign: 'center', marginVertical: spacing.md }}>
+              सध्या कोणतीही सूचना उपलब्ध नाही.
+            </AppText>
+          ) : (
+            notices.map((notice) => {
+              const formattedDate = notice.created_at
+                ? new Date(notice.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : notice.date;
+
+              return (
+                <NoticeCard
+                  key={notice.id}
+                  title={notice.title}
+                  date={formattedDate}
+                  description={notice.description}
+                />
+              );
+            })
+          )}
         </View>
 
         {/* Village Funds Section */}
@@ -93,27 +161,33 @@ export default function Home() {
           </View>
 
           <TouchableOpacity style={styles.fundsCard} onPress={() => router.push('/village/funds')} activeOpacity={0.9}>
-            <View style={styles.fundsRow}>
-              <View style={styles.fundItem}>
-                <AppText variant="headingMedium" style={styles.fundValueTotal}>₹{(DEMO_PROJECTS?.reduce((sum, p) => sum + (p.budget || 0), 0) / 100000).toFixed(1)} ल</AppText>
-                <AppText variant="label" style={styles.fundLabel}>एकूण निधी</AppText>
-              </View>
-              <View style={styles.fundItem}>
-                <AppText variant="headingMedium" style={styles.fundValueSpent}>₹{(DEMO_PROJECTS?.reduce((sum, p) => sum + (p.spent || 0), 0) / 100000).toFixed(1)} ल</AppText>
-                <AppText variant="label" style={styles.fundLabel}>खर्च</AppText>
-              </View>
-              <View style={styles.fundItem}>
-                <AppText variant="headingMedium" style={styles.fundValueRemaining}>₹{((DEMO_PROJECTS?.reduce((sum, p) => sum + (p.budget || 0), 0) - DEMO_PROJECTS?.reduce((sum, p) => sum + (p.spent || 0), 0)) / 100000).toFixed(1)} ल</AppText>
-                <AppText variant="label" style={styles.fundLabel}>शिल्लक</AppText>
-              </View>
-            </View>
+            {loadingFunds ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
+            ) : (
+              <>
+                <View style={styles.fundsRow}>
+                  <View style={styles.fundItem}>
+                    <AppText variant="headingMedium" style={styles.fundValueTotal}>₹{(fundsData.totalIncome / 100000).toFixed(1)} ल</AppText>
+                    <AppText variant="label" style={styles.fundLabel}>एकूण निधी</AppText>
+                  </View>
+                  <View style={styles.fundItem}>
+                    <AppText variant="headingMedium" style={styles.fundValueSpent}>₹{(fundsData.totalSpent / 100000).toFixed(1)} ल</AppText>
+                    <AppText variant="label" style={styles.fundLabel}>खर्च</AppText>
+                  </View>
+                  <View style={styles.fundItem}>
+                    <AppText variant="headingMedium" style={styles.fundValueRemaining}>₹{(fundsData.remaining / 100000).toFixed(1)} ल</AppText>
+                    <AppText variant="label" style={styles.fundLabel}>शिल्लक</AppText>
+                  </View>
+                </View>
 
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBarBg}>
-                <View style={[styles.progressBarFill, { width: `${(DEMO_PROJECTS?.reduce((sum, p) => sum + (p.spent || 0), 0) / (DEMO_PROJECTS?.reduce((sum, p) => sum + (p.budget || 0), 0) || 1)) * 100}%` }]} />
-              </View>
-              <AppText variant="label" style={styles.progressText}>{((DEMO_PROJECTS?.reduce((sum, p) => sum + (p.spent || 0), 0) / (DEMO_PROJECTS?.reduce((sum, p) => sum + (p.budget || 0), 0) || 1)) * 100).toFixed(0)}% खर्च</AppText>
-            </View>
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBarBg}>
+                    <View style={[styles.progressBarFill, { width: `${fundsData.spendingPercentage}%` }]} />
+                  </View>
+                  <AppText variant="label" style={styles.progressText}>{fundsData.spendingPercentage.toFixed(0)}% खर्च</AppText>
+                </View>
+              </>
+            )}
           </TouchableOpacity>
         </View>
 
