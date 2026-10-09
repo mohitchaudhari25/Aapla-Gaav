@@ -7,6 +7,7 @@ import AppText from '../../components/ui/AppText';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { mockVillage } from '../../data/mockData';
 
 export default function Village() {
   const router = useRouter();
@@ -40,9 +41,11 @@ export default function Village() {
                 setErrorMsg('गावाची माहिती मिळवण्यात त्रुटी आली.');
               } else if (data) {
                 setVillage(data);
+              } else {
+                setVillage(mockVillage);
               }
             } else {
-              setErrorMsg('गावाची माहिती उपलब्ध नाही.');
+              setVillage(mockVillage); // fallback to demo data
             }
           } else {
             setErrorMsg('कृपया लॉगिन करा.');

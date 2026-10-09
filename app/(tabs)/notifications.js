@@ -8,6 +8,7 @@ import NotificationCard from '../../components/cards/NotificationCard';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { mockNotifications } from '../../data/mockData';
 
 export default function Notifications() {
   const router = useRouter();
@@ -36,10 +37,10 @@ export default function Notifications() {
         if (error) {
           setErrorMsg('सूचना मिळवण्यात त्रुटी आली.');
         } else if (data) {
-          setNotifications(data);
+          setNotifications([...data, ...mockNotifications]);
         }
       } else {
-        setErrorMsg('कृपया लॉगिन करा.');
+        setNotifications([...mockNotifications]); // Show demo notifications even if not logged in
       }
     } catch (error) {
       setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');

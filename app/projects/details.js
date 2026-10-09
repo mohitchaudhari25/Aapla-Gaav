@@ -8,6 +8,7 @@ import AppButton from '../../components/ui/AppButton';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { mockProjects } from '../../data/mockData';
 
 const formatCurrency = (amount) => {
   if (amount == null) return '₹०';
@@ -40,6 +41,15 @@ export default function ProjectDetails() {
       setLoading(true);
       setErrorMsg(null);
       try {
+        if (id && typeof id === 'string' && id.startsWith('demo-')) {
+          const demoProject = mockProjects.find(p => p.id === id);
+          if (demoProject) {
+            setProject(demoProject);
+            setLoading(false);
+            return;
+          }
+        }
+        
         const { data, error } = await supabase
           .from('projects')
           .select('*')

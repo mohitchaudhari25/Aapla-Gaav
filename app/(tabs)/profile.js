@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
@@ -13,6 +13,7 @@ export default function Profile() {
   const [userProfile, setUserProfile] = useState(null);
   const [villageName, setVillageName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -51,7 +52,7 @@ export default function Profile() {
   );
 
   const handleEditProfile = () => {
-    Alert.alert("प्रोफाइल संपादित करा", "ही सुविधा लवकरच उपलब्ध होईल.");
+    router.push('/profile/edit');
   };
 
   const handleAppInfo = () => {
@@ -61,18 +62,30 @@ export default function Profile() {
     );
   };
 
+  const performLogout = async () => {
+    setLoggingOut(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      router.replace('/auth/login');
+    } catch (error) {
+      console.error(error);
+      Alert.alert("त्रुटी", "लॉगआउट करताना समस्या आली. कृपया पुन्हा प्रयत्न करा.");
+      setLoggingOut(false);
+    }
+  };
+
   const handleLogout = () => {
-    Alert.alert("लॉगआउट", "तुम्हाला नक्की लॉगआउट करायचे आहे का?", [
-      { text: "नाही", style: "cancel" },
-      { 
-        text: "होय", 
-        style: "destructive", 
-        onPress: async () => {
-          await supabase.auth.signOut();
-          router.replace('/auth/login');
-        } 
+    if (Platform.OS === 'web') {
+      if (window.confirm("तुम्हाला नक्की लॉगआउट करायचे आहे का?")) {
+        performLogout();
       }
-    ]);
+    } else {
+      Alert.alert("लॉगआउट", "तुम्हाला नक्की लॉगआउट करायचे आहे का?", [
+        { text: "नाही", style: "cancel" },
+        { text: "होय", style: "destructive", onPress: performLogout }
+      ]);
+    }
   };
 
   const profileOptions = [
@@ -142,11 +155,11 @@ export default function Profile() {
 
         {/* Logout Button */}
         <AppButton 
-          title="लॉगआउट" 
+          title={loggingOut ? "लॉगआउट करत आहे..." : "लॉगआउट"} 
           onPress={handleLogout} 
           variant="outline"
+          disabled={loggingOut}
           style={styles.logoutButton}
-          textStyle={{ color: colors.error }}
         />
 
       </ScrollView>

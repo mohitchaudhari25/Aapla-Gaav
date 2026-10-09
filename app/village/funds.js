@@ -7,6 +7,7 @@ import AppText from '../../components/ui/AppText';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { mockFunds } from '../../data/mockData';
 
 const formatCurrency = (amount) => {
   if (amount == null) return '₹०';
@@ -44,10 +45,10 @@ export default function VillageFunds() {
               if (error) {
                 setErrorMsg('निधीची माहिती मिळवण्यात त्रुटी आली.');
               } else if (data) {
-                setTransactions(data);
+                setTransactions([...data, ...mockFunds]);
               }
             } else {
-               setTransactions([]);
+               setTransactions([...mockFunds]);
             }
           }
         } catch (error) {

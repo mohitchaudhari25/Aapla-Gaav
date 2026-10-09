@@ -9,6 +9,7 @@ import EmptyState from '../../components/common/EmptyState';
 import AppButton from '../../components/ui/AppButton';
 import { colors, spacing } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { mockNotices } from '../../data/mockData';
 
 export default function Notices() {
   const router = useRouter();
@@ -27,7 +28,7 @@ export default function Notices() {
         .order('created_at', { ascending: false });
         
       if (fetchError) throw fetchError;
-      setNotices(data || []);
+      setNotices([...(data || []), ...mockNotices]);
     } catch (err) {
       console.error(err);
       setError('सूचना लोड करताना त्रुटी आली. कृपया पुन्हा प्रयत्न करा.');

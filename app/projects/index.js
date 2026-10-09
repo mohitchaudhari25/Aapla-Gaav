@@ -8,6 +8,7 @@ import ProjectCard from '../../components/cards/ProjectCard';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { mockProjects } from '../../data/mockData';
 
 export default function Projects() {
   const router = useRouter();
@@ -35,10 +36,10 @@ export default function Projects() {
               query = query.eq('village_id', profile.village_id);
             }
             const { data, error } = await query;
-            if (error) {
+              if (error) {
               setErrorMsg('विकास कामाची माहिती मिळवण्यात त्रुटी आली.');
             } else if (data) {
-              setProjects(data);
+              setProjects([...data, ...mockProjects]);
             }
           }
         } catch (error) {

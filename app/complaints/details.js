@@ -8,6 +8,7 @@ import AppText from '../../components/ui/AppText';
 import AppButton from '../../components/ui/AppButton';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { mockComplaints, mockComplaintUpdates } from '../../data/mockData';
 import { Ionicons } from '@expo/vector-icons';
 
 const TIMELINE_STAGES = [
@@ -30,6 +31,16 @@ export default function ComplaintDetails() {
     const fetchDetails = async () => {
       try {
         setLoading(true);
+        if (id && typeof id === 'string' && id.startsWith('demo-')) {
+          const demoComplaint = mockComplaints.find(c => c.id === id);
+          if (demoComplaint) {
+            setComplaint(demoComplaint);
+            setUpdates(mockComplaintUpdates[id] || []);
+            setLoading(false);
+            return;
+          }
+        }
+        
         const { data: complaintData, error: complaintError } = await supabase
           .from('complaints')
           .select('*')

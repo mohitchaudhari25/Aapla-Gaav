@@ -9,6 +9,7 @@ import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing } from '../../constants';
 import { DEMO_CONTACTS } from '../../data/contacts';
 import { supabase } from '../../lib/supabase';
+import { mockContacts } from '../../data/mockData';
 
 export default function Contacts() {
   const router = useRouter();
@@ -42,10 +43,10 @@ export default function Contacts() {
               if (error) {
                 setErrorMsg('संपर्क माहिती मिळवण्यात त्रुटी आली.');
               } else if (data) {
-                setVillageContacts(data);
+                setVillageContacts([...data, ...mockContacts]);
               }
             } else {
-               setVillageContacts([]);
+               setVillageContacts([...mockContacts]);
             }
           } else {
              setErrorMsg('कृपया लॉगिन करा.');

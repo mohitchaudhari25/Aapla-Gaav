@@ -1,11 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Platform, StatusBar, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Platform, StatusBar, ActivityIndicator, Dimensions } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../../constants';
 import AppText from '../../components/ui/AppText';
 import NoticeCard from '../../components/cards/NoticeCard';
 import { supabase } from '../../lib/supabase';
+import { mockNotices, mockFunds, mockVillage } from '../../data/mockData';
 
 export default function Home() {
   const router = useRouter();
@@ -13,6 +14,8 @@ export default function Home() {
   const [loadingNotices, setLoadingNotices] = useState(true);
   const [fundsData, setFundsData] = useState({ totalIncome: 0, totalSpent: 0, remaining: 0, spendingPercentage: 0 });
   const [loadingFunds, setLoadingFunds] = useState(true);
+  const [userName, setUserName] = useState('');
+  const [villageName, setVillageName] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -25,9 +28,22 @@ export default function Home() {
           if (user) {
             const { data: profile } = await supabase
               .from('profiles')
-              .select('village_id')
+              .select('village_id, full_name')
               .eq('id', user.id)
               .single();
+
+            if (profile) {
+              setUserName(profile.full_name || '');
+              if (profile.village_id) {
+                const { data: village } = await supabase
+                  .from('villages')
+                  .select('name')
+                  .eq('id', profile.village_id)
+                  .single();
+                  
+                if (village) setVillageName(village.name);
+              }
+            }
 
             if (profile?.village_id) {
               const { data: noticesData } = await supabase
@@ -39,7 +55,9 @@ export default function Home() {
                 .limit(2);
 
               if (noticesData) {
-                setNotices(noticesData);
+                setNotices([...noticesData, ...mockNotices].slice(0, 2));
+              } else {
+                setNotices([...mockNotices].slice(0, 2));
               }
 
               const { data: fundsData } = await supabase
@@ -48,13 +66,39 @@ export default function Home() {
                 .eq('village_id', profile.village_id);
 
               if (fundsData) {
-                const totalIncome = fundsData.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
-                const totalSpent = fundsData.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+                const combinedFunds = [...fundsData, ...mockFunds];
+                const totalIncome = combinedFunds.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
+                const totalSpent = combinedFunds.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+                const remaining = totalIncome - totalSpent;
+                const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
+                setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage });
+              } else {
+                const combinedFunds = [...mockFunds];
+                const totalIncome = combinedFunds.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
+                const totalSpent = combinedFunds.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
                 const remaining = totalIncome - totalSpent;
                 const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
                 setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage });
               }
+            } else {
+              // Not logged in or no village_id, show demo data
+              setNotices([...mockNotices].slice(0, 2));
+              const combinedFunds = [...mockFunds];
+              const totalIncome = combinedFunds.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
+              const totalSpent = combinedFunds.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+              const remaining = totalIncome - totalSpent;
+              const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
+              setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage });
             }
+          } else {
+            // Not logged in
+            setNotices([...mockNotices].slice(0, 2));
+            const combinedFunds = [...mockFunds];
+            const totalIncome = combinedFunds.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
+            const totalSpent = combinedFunds.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+            const remaining = totalIncome - totalSpent;
+            const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
+            setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage });
           }
         } catch (err) {
           console.error(err);
@@ -70,37 +114,69 @@ export default function Home() {
 
   // Quick Services data
   const quickServices = [
-    { id: '1', title: 'तक्रार नोंदवा', icon: 'alert-circle-outline', route: '/complaints/new', color: colors.warning },
-    { id: '2', title: 'माझ्या तक्रारी', icon: 'list-outline', route: '/(tabs)/complaints', color: colors.info },
     { id: '3', title: 'माझं गाव', icon: 'business-outline', route: '/village', color: colors.primary },
+    { id: '1', title: 'तक्रार नोंदवा', icon: 'alert-circle-outline', route: '/complaints/new', color: colors.warning },
     { id: '4', title: 'विकास कामे', icon: 'construct-outline', route: '/projects', color: '#8E24AA' },
   ];
 
+  const { width } = Dimensions.get('window');
+  
+  const schemeNews = [
+    { id: '1', title: 'शिलाई मशीन योजना', subtitle: 'पात्रता व अर्जाची माहिती', badge: 'योजना' },
+    { id: '2', title: 'शेतकरी योजना', subtitle: 'अनुदान व सरकारी मदत', badge: 'कृषी' },
+    { id: '3', title: 'पीएम किसान निधी', subtitle: 'सन्मान निधी', badge: 'निधी' },
+    { id: '4', title: 'नवीन घोषणा', subtitle: 'गावातील महत्त्वाच्या बातम्या', badge: 'बातमी' },
+  ];
 
   return (
     <View style={styles.container}>
-      {/* Custom Header Area */}
-      <View style={styles.header}>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.headerContent}>
-            <View>
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+          {/* Custom Header Area */}
+          <View style={styles.profileHeader}>
+            <View style={{ flex: 1, paddingRight: spacing.md }}>
               <AppText variant="label" style={styles.greeting}>नमस्कार 👋</AppText>
-              <AppText variant="headingMedium" style={styles.userName}>मोहित चौधरी</AppText>
-              <AppText variant="label" style={styles.location}>📍 ... ग्रामपंचायत, जळगाव</AppText>
+              <AppText variant="headingMedium" style={styles.userName}>{userName || 'नागरिक'}</AppText>
+              <AppText variant="label" style={styles.location}>
+                📍 {villageName ? `${villageName} ग्रामपंचायत` : 'माहिती उपलब्ध नाही'}
+              </AppText>
             </View>
             <TouchableOpacity onPress={() => router.push('/(tabs)/notifications')} style={styles.notificationBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="notifications-outline" size={24} color={colors.white} />
               <View style={styles.badge} />
             </TouchableOpacity>
           </View>
-        </SafeAreaView>
-      </View>
 
-      <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Government Schemes & Citizen News Carousel */}
+          <View style={styles.carouselContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={width * 0.85 + spacing.md} decelerationRate="fast" contentContainerStyle={styles.carouselScroll}>
+              {schemeNews.map((item) => (
+                <TouchableOpacity 
+                  key={item.id} 
+                  style={styles.schemeCard} 
+                  activeOpacity={0.9}
+                  onPress={() => router.push({ pathname: '/schemes/details', params: { id: item.id } })}
+                >
+                  <View style={styles.schemeHeader}>
+                    <View style={styles.schemeBadge}>
+                      <AppText variant="label" style={styles.schemeBadgeText}>{item.badge}</AppText>
+                    </View>
+                  </View>
+                  <AppText variant="headingSmall" style={styles.schemeTitle}>{item.title}</AppText>
+                  <AppText variant="bodyMedium" style={styles.schemeSubtitle}>{item.subtitle}</AppText>
+                  <View style={styles.schemeAction}>
+                    <AppText variant="label" style={styles.schemeActionText}>अधिक माहिती</AppText>
+                    <Ionicons name="arrow-forward" size={16} color={colors.primary} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
 
         {/* Quick Services Section */}
-        <View style={styles.section}>
-          <AppText variant="headingSmall" style={[styles.sectionTitle, { marginBottom: spacing.md }]}>त्वरित सेवा</AppText>
+        <View style={[styles.section, { paddingTop: spacing.md }]}>
+          <AppText variant="headingSmall" style={[styles.sectionTitle, { marginBottom: spacing.md, paddingHorizontal: spacing.lg }]}>त्वरित सेवा</AppText>
           <View style={styles.quickServicesGrid}>
             {quickServices.map((service) => (
               <TouchableOpacity
@@ -120,12 +196,13 @@ export default function Home() {
 
         {/* Village Notices Section */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <AppText variant="headingSmall" style={styles.sectionTitle}>📢 गावातील सूचना</AppText>
+          <View style={[styles.sectionHeader, { paddingHorizontal: spacing.lg }]}>
+            <AppText variant="headingSmall" style={styles.sectionTitle}>गावातील सूचना</AppText>
             <TouchableOpacity onPress={() => router.push('/notices')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <AppText variant="label" style={styles.seeAllText}>सर्व पहा</AppText>
             </TouchableOpacity>
           </View>
+          <View style={{ paddingHorizontal: spacing.lg }}>
 
           {loadingNotices ? (
             <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
@@ -149,18 +226,44 @@ export default function Home() {
               );
             })
           )}
+          </View>
+        </View>
+
+        {/* Important Contacts Section */}
+        <View style={styles.section}>
+          <View style={[styles.sectionHeader, { paddingHorizontal: spacing.lg }]}>
+            <AppText variant="headingSmall" style={styles.sectionTitle}>महत्त्वाचे संपर्क</AppText>
+            <TouchableOpacity onPress={() => router.push('/contacts')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <AppText variant="label" style={styles.seeAllText}>सर्व पहा</AppText>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.contactsScroll}>
+            {[
+              { id: '1', name: 'सरपंच', phone: '98765-43210', icon: '👨‍💼' },
+              { id: '2', name: 'रुग्णवाहिका', phone: '108', icon: '🚑' },
+              { id: '3', name: 'पोलीस', phone: '100', icon: '👮' }
+            ].map((contact) => (
+              <TouchableOpacity key={contact.id} style={styles.contactCard} activeOpacity={0.7} onPress={() => router.push('/contacts')}>
+                <AppText style={styles.contactEmoji}>{contact.icon}</AppText>
+                <AppText variant="label" style={styles.contactName}>{contact.name}</AppText>
+                <AppText variant="bodySmall" style={styles.contactPhone}>{contact.phone}</AppText>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
         {/* Village Funds Section */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <AppText variant="headingSmall" style={styles.sectionTitle}>💰 गावाचा निधी</AppText>
+          <View style={[styles.sectionHeader, { paddingHorizontal: spacing.lg }]}>
+            <AppText variant="headingSmall" style={styles.sectionTitle}>गावाचा निधी</AppText>
             <TouchableOpacity onPress={() => router.push('/village/funds')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <AppText variant="label" style={styles.seeAllText}>सर्व पहा</AppText>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.fundsCard} onPress={() => router.push('/village/funds')} activeOpacity={0.9}>
+          <View style={{ paddingHorizontal: spacing.lg }}>
+            <TouchableOpacity style={styles.fundsCard} onPress={() => router.push('/village/funds')} activeOpacity={0.9}>
             {loadingFunds ? (
               <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
             ) : (
@@ -189,9 +292,11 @@ export default function Home() {
               </>
             )}
           </TouchableOpacity>
+          </View>
         </View>
 
       </ScrollView>
+      </SafeAreaView>
     </View>
   );
 }
@@ -201,22 +306,82 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    backgroundColor: colors.primary,
-    borderBottomLeftRadius: radius.xl,
-    borderBottomRightRadius: radius.xl,
+  safeArea: {
+    flex: 1,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
-  safeArea: {
-    // SafeAreaView handles iOS top padding
+  scrollContainer: {
+    flex: 1,
   },
-  headerContent: {
+  scrollContent: {
+    paddingBottom: spacing.xxl * 2,
+    paddingTop: 0,
+  },
+  carouselContainer: {
+    marginBottom: spacing.lg,
+  },
+  carouselScroll: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  schemeCard: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    justifyContent: 'space-between',
+    minHeight: 150,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  schemeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xl,
+    marginBottom: spacing.md,
+  },
+  schemeBadge: {
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  schemeBadgeText: {
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  schemeTitle: {
+    color: colors.text,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  schemeSubtitle: {
+    color: colors.text,
+    opacity: 0.8,
+    marginBottom: spacing.md,
+  },
+  schemeAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 'auto',
+  },
+  schemeActionText: {
+    color: colors.primary,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  profileHeader: {
+    backgroundColor: colors.primary,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+    padding: spacing.lg,
+    paddingTop: spacing.xl,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
   },
   greeting: {
     color: colors.primaryPale,
@@ -244,13 +409,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.primary,
   },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl * 2,
-  },
   section: {
     marginBottom: spacing.xxl,
   },
@@ -269,23 +427,24 @@ const styles = StyleSheet.create({
   },
   quickServicesGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: spacing.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
   serviceCard: {
-    width: '47%',
+    flex: 1,
     backgroundColor: colors.surface,
-    padding: spacing.md,
+    padding: spacing.sm,
+    paddingVertical: spacing.md,
     borderRadius: radius.lg,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
   },
   iconWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.round,
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.sm,
@@ -294,6 +453,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: 'center',
     fontWeight: '500',
+    flexShrink: 1,
   },
   fundsCard: {
     backgroundColor: colors.surface,
@@ -309,6 +469,7 @@ const styles = StyleSheet.create({
   },
   fundItem: {
     alignItems: 'center',
+    flex: 1,
   },
   fundValueTotal: {
     color: colors.text,
@@ -343,5 +504,31 @@ const styles = StyleSheet.create({
   progressText: {
     color: colors.secondaryText,
     fontWeight: '600',
+  },
+  contactsScroll: {
+    paddingRight: spacing.lg,
+  },
+  contactCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    width: 110,
+    marginRight: spacing.md,
+  },
+  contactEmoji: {
+    fontSize: 28,
+    marginBottom: spacing.sm,
+  },
+  contactName: {
+    color: colors.text,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  contactPhone: {
+    color: colors.primary,
+    fontWeight: '500',
   }
 });
