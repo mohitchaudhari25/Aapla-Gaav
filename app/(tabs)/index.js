@@ -2,14 +2,19 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Platform, StatusBar, ActivityIndicator, Dimensions } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, radius } from '../../constants';
+import { spacing, radius } from '../../constants';
 import AppText from '../../components/ui/AppText';
 import NoticeCard from '../../components/cards/NoticeCard';
 import { supabase } from '../../lib/supabase';
 import { mockNotices, mockFunds, mockVillage } from '../../data/mockData';
+import { useTranslation } from 'react-i18next';
+import { useAppTheme } from '../../lib/ThemeContext';
 
 export default function Home() {
   const router = useRouter();
+  const { t } = useTranslation();
+  const colors = useAppTheme();
+  
   const [notices, setNotices] = useState([]);
   const [loadingNotices, setLoadingNotices] = useState(true);
   const [fundsData, setFundsData] = useState({ totalIncome: 0, totalSpent: 0, remaining: 0, spendingPercentage: 0 });
@@ -114,19 +119,21 @@ export default function Home() {
 
   // Quick Services data
   const quickServices = [
-    { id: '3', title: 'माझं गाव', icon: 'business-outline', route: '/village', color: colors.primary },
-    { id: '1', title: 'तक्रार नोंदवा', icon: 'alert-circle-outline', route: '/complaints/new', color: colors.warning },
-    { id: '4', title: 'विकास कामे', icon: 'construct-outline', route: '/projects', color: '#8E24AA' },
+    { id: '3', title: t('home_quick_my_village'), icon: 'business-outline', route: '/village', color: colors.primary },
+    { id: '1', title: t('home_quick_report'), icon: 'alert-circle-outline', route: '/complaints/new', color: colors.warning },
+    { id: '4', title: t('home_quick_projects'), icon: 'construct-outline', route: '/projects', color: '#8E24AA' },
   ];
 
   const { width } = Dimensions.get('window');
   
   const schemeNews = [
-    { id: '1', title: 'शिलाई मशीन योजना', subtitle: 'पात्रता व अर्जाची माहिती', badge: 'योजना' },
-    { id: '2', title: 'शेतकरी योजना', subtitle: 'अनुदान व सरकारी मदत', badge: 'कृषी' },
-    { id: '3', title: 'पीएम किसान निधी', subtitle: 'सन्मान निधी', badge: 'निधी' },
-    { id: '4', title: 'नवीन घोषणा', subtitle: 'गावातील महत्त्वाच्या बातम्या', badge: 'बातमी' },
+    { id: '1', title: 'शिलाई मशीन योजना', subtitle: 'पात्रता व अर्जाची माहिती', badge: t('home_scheme_badge') },
+    { id: '2', title: 'शेतकरी योजना', subtitle: 'अनुदान व सरकारी मदत', badge: t('home_agri_badge') },
+    { id: '3', title: 'पीएम किसान निधी', subtitle: 'सन्मान निधी', badge: t('home_fund_badge') },
+    { id: '4', title: 'नवीन घोषणा', subtitle: 'गावातील महत्त्वाच्या बातम्या', badge: t('home_news_badge') },
   ];
+
+  const styles = getStyles(colors);
 
   return (
     <View style={styles.container}>
@@ -136,10 +143,10 @@ export default function Home() {
           {/* Custom Header Area */}
           <View style={styles.profileHeader}>
             <View style={{ flex: 1, paddingRight: spacing.md }}>
-              <AppText variant="label" style={styles.greeting}>नमस्कार 👋</AppText>
-              <AppText variant="headingMedium" style={styles.userName}>{userName || 'नागरिक'}</AppText>
+              <AppText variant="label" style={styles.greeting}>{t('home_greeting')}</AppText>
+              <AppText variant="headingMedium" style={styles.userName}>{userName || t('home_citizen')}</AppText>
               <AppText variant="label" style={styles.location}>
-                📍 {villageName ? `${villageName} ग्रामपंचायत` : 'माहिती उपलब्ध नाही'}
+                📍 {villageName ? `${villageName} ${t('home_village_panchayat')}` : t('home_village_no_data')}
               </AppText>
             </View>
             <TouchableOpacity onPress={() => router.push('/(tabs)/notifications')} style={styles.notificationBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -166,7 +173,7 @@ export default function Home() {
                   <AppText variant="headingSmall" style={styles.schemeTitle}>{item.title}</AppText>
                   <AppText variant="bodyMedium" style={styles.schemeSubtitle}>{item.subtitle}</AppText>
                   <View style={styles.schemeAction}>
-                    <AppText variant="label" style={styles.schemeActionText}>अधिक माहिती</AppText>
+                    <AppText variant="label" style={styles.schemeActionText}>{t('home_more_info')}</AppText>
                     <Ionicons name="arrow-forward" size={16} color={colors.primary} />
                   </View>
                 </TouchableOpacity>
@@ -176,7 +183,7 @@ export default function Home() {
 
         {/* Quick Services Section */}
         <View style={[styles.section, { paddingTop: spacing.md }]}>
-          <AppText variant="headingSmall" style={[styles.sectionTitle, { marginBottom: spacing.md, paddingHorizontal: spacing.lg }]}>त्वरित सेवा</AppText>
+          <AppText variant="headingSmall" style={[styles.sectionTitle, { marginBottom: spacing.md, paddingHorizontal: spacing.lg }]}>{t('home_quick_services')}</AppText>
           <View style={styles.quickServicesGrid}>
             {quickServices.map((service) => (
               <TouchableOpacity
@@ -197,9 +204,9 @@ export default function Home() {
         {/* Village Notices Section */}
         <View style={styles.section}>
           <View style={[styles.sectionHeader, { paddingHorizontal: spacing.lg }]}>
-            <AppText variant="headingSmall" style={styles.sectionTitle}>गावातील सूचना</AppText>
+            <AppText variant="headingSmall" style={styles.sectionTitle}>{t('home_village_notices')}</AppText>
             <TouchableOpacity onPress={() => router.push('/notices')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <AppText variant="label" style={styles.seeAllText}>सर्व पहा</AppText>
+              <AppText variant="label" style={styles.seeAllText}>{t('home_see_all')}</AppText>
             </TouchableOpacity>
           </View>
           <View style={{ paddingHorizontal: spacing.lg }}>
@@ -208,7 +215,7 @@ export default function Home() {
             <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} />
           ) : notices.length === 0 ? (
             <AppText variant="bodyMedium" style={{ color: colors.secondaryText, textAlign: 'center', marginVertical: spacing.md }}>
-              सध्या कोणतीही सूचना उपलब्ध नाही.
+              {t('home_no_notices')}
             </AppText>
           ) : (
             notices.map((notice) => {
@@ -232,17 +239,17 @@ export default function Home() {
         {/* Important Contacts Section */}
         <View style={styles.section}>
           <View style={[styles.sectionHeader, { paddingHorizontal: spacing.lg }]}>
-            <AppText variant="headingSmall" style={styles.sectionTitle}>महत्त्वाचे संपर्क</AppText>
+            <AppText variant="headingSmall" style={styles.sectionTitle}>{t('home_important_contacts')}</AppText>
             <TouchableOpacity onPress={() => router.push('/contacts')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <AppText variant="label" style={styles.seeAllText}>सर्व पहा</AppText>
+              <AppText variant="label" style={styles.seeAllText}>{t('home_see_all')}</AppText>
             </TouchableOpacity>
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.contactsScroll}>
             {[
-              { id: '1', name: 'सरपंच', phone: '98765-43210', icon: '👨‍💼' },
-              { id: '2', name: 'रुग्णवाहिका', phone: '108', icon: '🚑' },
-              { id: '3', name: 'पोलीस', phone: '100', icon: '👮' }
+              { id: '1', name: t('home_sarpanch'), phone: '98765-43210', icon: '👨‍💼' },
+              { id: '2', name: t('home_ambulance'), phone: '108', icon: '🚑' },
+              { id: '3', name: t('home_police'), phone: '100', icon: '👮' }
             ].map((contact) => (
               <TouchableOpacity key={contact.id} style={styles.contactCard} activeOpacity={0.7} onPress={() => router.push('/contacts')}>
                 <AppText style={styles.contactEmoji}>{contact.icon}</AppText>
@@ -256,9 +263,9 @@ export default function Home() {
         {/* Village Funds Section */}
         <View style={styles.section}>
           <View style={[styles.sectionHeader, { paddingHorizontal: spacing.lg }]}>
-            <AppText variant="headingSmall" style={styles.sectionTitle}>गावाचा निधी</AppText>
+            <AppText variant="headingSmall" style={styles.sectionTitle}>{t('home_village_funds')}</AppText>
             <TouchableOpacity onPress={() => router.push('/village/funds')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <AppText variant="label" style={styles.seeAllText}>सर्व पहा</AppText>
+              <AppText variant="label" style={styles.seeAllText}>{t('home_see_all')}</AppText>
             </TouchableOpacity>
           </View>
 
@@ -270,16 +277,16 @@ export default function Home() {
               <>
                 <View style={styles.fundsRow}>
                   <View style={styles.fundItem}>
-                    <AppText variant="headingMedium" style={styles.fundValueTotal}>₹{(fundsData.totalIncome / 100000).toFixed(1)} ल</AppText>
-                    <AppText variant="label" style={styles.fundLabel}>एकूण निधी</AppText>
+                    <AppText variant="headingMedium" style={styles.fundValueTotal}>₹{(fundsData.totalIncome / 100000).toFixed(1)} {t('home_lakh')}</AppText>
+                    <AppText variant="label" style={styles.fundLabel}>{t('home_total_funds')}</AppText>
                   </View>
                   <View style={styles.fundItem}>
-                    <AppText variant="headingMedium" style={styles.fundValueSpent}>₹{(fundsData.totalSpent / 100000).toFixed(1)} ल</AppText>
-                    <AppText variant="label" style={styles.fundLabel}>खर्च</AppText>
+                    <AppText variant="headingMedium" style={styles.fundValueSpent}>₹{(fundsData.totalSpent / 100000).toFixed(1)} {t('home_lakh')}</AppText>
+                    <AppText variant="label" style={styles.fundLabel}>{t('home_expense')}</AppText>
                   </View>
                   <View style={styles.fundItem}>
-                    <AppText variant="headingMedium" style={styles.fundValueRemaining}>₹{(fundsData.remaining / 100000).toFixed(1)} ल</AppText>
-                    <AppText variant="label" style={styles.fundLabel}>शिल्लक</AppText>
+                    <AppText variant="headingMedium" style={styles.fundValueRemaining}>₹{(fundsData.remaining / 100000).toFixed(1)} {t('home_lakh')}</AppText>
+                    <AppText variant="label" style={styles.fundLabel}>{t('home_balance')}</AppText>
                   </View>
                 </View>
 
@@ -287,7 +294,7 @@ export default function Home() {
                   <View style={styles.progressBarBg}>
                     <View style={[styles.progressBarFill, { width: `${fundsData.spendingPercentage}%` }]} />
                   </View>
-                  <AppText variant="label" style={styles.progressText}>{fundsData.spendingPercentage.toFixed(0)}% खर्च</AppText>
+                  <AppText variant="label" style={styles.progressText}>{fundsData.spendingPercentage.toFixed(0)}{t('home_percent_spent')}</AppText>
                 </View>
               </>
             )}
@@ -301,7 +308,7 @@ export default function Home() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -515,7 +522,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
-    width: 110,
+    width: 125,
     marginRight: spacing.md,
   },
   contactEmoji: {

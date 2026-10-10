@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, radius } from '../../constants';
+import { spacing, radius } from '../../constants';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
 import AppButton from '../../components/ui/AppButton';
+import { useTranslation } from 'react-i18next';
+import { useAppTheme } from '../../lib/ThemeContext';
 
 const LANGUAGES = [
   { id: 'mr', main: 'मराठी', secondary: 'Marathi' },
@@ -15,18 +17,21 @@ const LANGUAGES = [
 
 export default function Language() {
   const router = useRouter();
-  const [selected, setSelected] = useState('mr');
+  const { i18n, t } = useTranslation();
+  const colors = useAppTheme();
+  const styles = getStyles(colors);
+  const [selected, setSelected] = useState(i18n.language || 'mr');
 
   const handleLanguageSelect = (id) => {
+    setSelected(id);
+    i18n.changeLanguage(id);
     if (selected === id) {
-      router.push('/onboarding');
-    } else {
-      setSelected(id);
+      router.push('/auth/login');
     }
   };
 
   const handleContinue = () => {
-    router.push('/onboarding');
+    router.push('/auth/login');
   };
 
   return (
@@ -79,7 +84,7 @@ export default function Language() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   header: {
     alignItems: 'center',
     marginTop: spacing.xl,

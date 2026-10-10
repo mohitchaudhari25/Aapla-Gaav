@@ -5,15 +5,23 @@ import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
 import AppButton from '../../components/ui/AppButton';
-import { colors, spacing, radius } from '../../constants';
+import { spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
+import { useAppTheme } from '../../lib/ThemeContext';
 
 export default function Profile() {
   const router = useRouter();
+  const { t } = useTranslation();
+  const colors = useAppTheme();
+  
   const [userProfile, setUserProfile] = useState(null);
   const [villageName, setVillageName] = useState('');
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [complaintStats, setComplaintStats] = useState({ total: 0, new: 0, inProgress: 0, resolved: 0 });
+
+  const styles = getStyles(colors);
 
   useFocusEffect(
     useCallback(() => {
@@ -39,6 +47,22 @@ export default function Profile() {
                 if (village) setVillageName(village.name);
               }
             }
+
+            // Fetch complaints
+            const { data: complaints } = await supabase
+              .from('complaints')
+              .select('status')
+              .eq('user_id', user.id);
+
+            if (complaints) {
+              const stats = { total: complaints.length, new: 0, inProgress: 0, resolved: 0 };
+              complaints.forEach(c => {
+                if (c.status === 'नवीन' || c.status === 'new' || c.status === 'submitted') stats.new++;
+                else if (c.status === 'प्रगतीपथावर' || c.status === 'in_progress') stats.inProgress++;
+                else if (c.status === 'सोडवली' || c.status === 'resolved') stats.resolved++;
+              });
+              setComplaintStats(stats);
+            }
           }
         } catch (error) {
           console.error('Error fetching profile:', error);
@@ -53,13 +77,6 @@ export default function Profile() {
 
   const handleEditProfile = () => {
     router.push('/profile/edit');
-  };
-
-  const handleAppInfo = () => {
-    Alert.alert(
-      "अॅपची माहिती", 
-      'AaplaGaav\n"आपलं गाव, आपली माहिती, आपली सेवा"\n\nVersion: 1.0.0'
-    );
   };
 
   const performLogout = async () => {
@@ -89,12 +106,12 @@ export default function Profile() {
   };
 
   const profileOptions = [
-    { id: '1', title: 'प्रोफाइल संपादित करा', icon: 'person-circle-outline', onPress: handleEditProfile },
-    { id: '2', title: 'भाषा', icon: 'language-outline', onPress: () => router.push('/onboarding/language') },
-    { id: '3', title: 'माझ्या तक्रारी', icon: 'list-outline', onPress: () => router.push('/(tabs)/complaints') },
-    { id: '4', title: 'सूचना', icon: 'notifications-outline', onPress: () => router.push('/(tabs)/notifications') },
-    { id: '5', title: 'महत्त्वाचे संपर्क', icon: 'call-outline', onPress: () => router.push('/contacts') },
-    { id: '6', title: 'अॅपची माहिती', icon: 'information-circle-outline', onPress: handleAppInfo },
+    { id: '1', title: t('editProfile', 'प्रोफाइल संपादित करा'), icon: 'person-circle-outline', onPress: handleEditProfile },
+    { id: '2', title: t('settings', 'सेटिंग्ज (Settings)'), icon: 'settings-outline', onPress: () => router.push('/profile/settings') },
+    { id: '3', title: t('myComplaints', 'माझ्या तक्रारी'), icon: 'list-outline', onPress: () => router.push('/(tabs)/complaints') },
+    { id: '4', title: t('notifications', 'सूचना'), icon: 'notifications-outline', onPress: () => router.push('/(tabs)/notifications') },
+    { id: '5', title: t('importantContacts', 'महत्त्वाचे संपर्क'), icon: 'call-outline', onPress: () => router.push('/contacts') },
+    { id: '6', title: t('helpAndInfo', 'मदत आणि माहिती'), icon: 'information-circle-outline', onPress: () => router.push('/profile/about') },
   ];
 
   return (
@@ -104,7 +121,7 @@ export default function Profile() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* User Info Card */}
         <View style={styles.userCard}>
           {loading ? (
@@ -132,13 +149,40 @@ export default function Profile() {
           )}
         </View>
 
+        {/* Complaints Summary Card */}
+        <View style={styles.complaintSummaryCard}>
+          <AppText variant="headingSmall" style={styles.summaryTitle}>माझ्या तक्रारी (My Complaints)</AppText>
+          {loading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                <AppText variant="headingMedium" style={{ color: colors.primary }}>{complaintStats.total}</AppText>
+                <AppText variant="label">एकूण (Total)</AppText>
+              </View>
+              <View style={styles.summaryItem}>
+                <AppText variant="headingMedium" style={{ color: colors.warning }}>{complaintStats.new}</AppText>
+                <AppText variant="label">नवीन (New)</AppText>
+              </View>
+              <View style={styles.summaryItem}>
+                <AppText variant="headingMedium" style={{ color: colors.info }}>{complaintStats.inProgress}</AppText>
+                <AppText variant="label">प्रगतीपथावर</AppText>
+              </View>
+              <View style={styles.summaryItem}>
+                <AppText variant="headingMedium" style={{ color: colors.success }}>{complaintStats.resolved}</AppText>
+                <AppText variant="label">सोडवली</AppText>
+              </View>
+            </View>
+          )}
+        </View>
+
         {/* Options List */}
         <View style={styles.optionsContainer}>
           {profileOptions.map((option, index) => (
-            <TouchableOpacity 
-              key={option.id} 
+            <TouchableOpacity
+              key={option.id}
               style={[
-                styles.optionRow, 
+                styles.optionRow,
                 index === profileOptions.length - 1 && styles.optionRowLast
               ]}
               onPress={option.onPress}
@@ -154,9 +198,9 @@ export default function Profile() {
         </View>
 
         {/* Logout Button */}
-        <AppButton 
-          title={loggingOut ? "लॉगआउट करत आहे..." : "लॉगआउट"} 
-          onPress={handleLogout} 
+        <AppButton
+          title={loggingOut ? "लॉगआउट करत आहे..." : "लॉगआउट"}
+          onPress={handleLogout}
           variant="outline"
           disabled={loggingOut}
           style={styles.logoutButton}
@@ -167,7 +211,7 @@ export default function Profile() {
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors) => StyleSheet.create({
   header: {
     marginVertical: spacing.md,
     marginBottom: spacing.xl,
@@ -217,6 +261,26 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginLeft: 4,
     fontWeight: '500',
+  },
+  complaintSummaryCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xl,
+  },
+  summaryTitle: {
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  summaryItem: {
+    alignItems: 'center',
+    flex: 1,
   },
   optionsContainer: {
     backgroundColor: colors.surface,

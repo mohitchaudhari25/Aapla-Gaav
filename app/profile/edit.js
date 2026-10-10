@@ -80,10 +80,10 @@ export default function EditProfile() {
       
       if (Platform.OS === 'web') {
         window.alert('प्रोफाइल यशस्वीरित्या अद्ययावत केले.');
-        router.back();
+        router.canGoBack() ? router.back() : router.replace('/');
       } else {
         Alert.alert('यशस्वी', 'प्रोफाइल यशस्वीरित्या अद्ययावत केले.', [
-          { text: 'ओके', onPress: () => router.back() }
+          { text: 'ओके', onPress: () => router.canGoBack() ? router.back() : router.replace('/') }
         ]);
       }
     } catch (error) {
@@ -101,7 +101,7 @@ export default function EditProfile() {
   return (
     <ScreenContainer useSafeArea>
       <View style={styles.header}>
-        <Ionicons name="arrow-back" size={24} color={colors.text} onPress={() => router.back()} />
+        <Ionicons name="arrow-back" size={24} color={colors.text} onPress={() => router.canGoBack() ? router.back() : router.replace('/')} />
         <AppText variant="headingSmall" style={styles.headerTitle}>प्रोफाइल संपादित करा</AppText>
         <View style={{ width: 24 }} />
       </View>
@@ -134,7 +134,7 @@ export default function EditProfile() {
                 <AppButton
                   title="रद्द करा"
                   variant="outline"
-                  onPress={() => router.back()}
+                  onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
                   style={styles.cancelBtn}
                   disabled={saving}
                 />

@@ -8,6 +8,7 @@ export const mockVillage = {
   population: '५,२००',
   families: '१,१००',
   area: '१२ चौरस किमी',
+  houses: '९५०',
   office_name: 'ग्रामपंचायत कार्यालय, शिवाजीनगर',
   timings: 'सकाळी १०:०० ते संध्याकाळी ५:००',
   weekly_off: 'रविवार',

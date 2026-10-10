@@ -92,7 +92,7 @@ export default function Village() {
         
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View>
@@ -125,7 +125,8 @@ export default function Village() {
             {/* Statistics */}
             <View style={styles.statsContainer}>
               {renderStatCard('लोकसंख्या', village.population, 'people-outline')}
-              {renderStatCard('कुटुंबे', village.families, 'home-outline')}
+              {renderStatCard('कुटुंबे', village.families, 'people-circle-outline')}
+              {renderStatCard('एकूण घरे', village.houses || village.totalHouses, 'home-outline')}
               {renderStatCard('क्षेत्रफळ', village.area, 'map-outline')}
             </View>
 
@@ -224,18 +225,20 @@ const styles = StyleSheet.create({
   },
   statsContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginBottom: spacing.xl,
     gap: spacing.sm,
   },
   statCard: {
-    flex: 1,
+    width: '47%',
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
+    marginBottom: spacing.sm,
   },
   statIconContainer: {
     width: 40,

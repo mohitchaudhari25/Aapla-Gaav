@@ -7,9 +7,11 @@ import AppText from '../../components/ui/AppText';
 import AppButton from '../../components/ui/AppButton';
 import AppInput from '../../components/ui/AppInput';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 
 export default function Login() {
   const router = useRouter();
+  const { t } = useTranslation();
   
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
@@ -18,8 +20,8 @@ export default function Login() {
 
   const handleLogin = async () => {
     let newErrors = {};
-    if (!mobile.trim()) newErrors.mobile = 'मोबाईल नंबर / ईमेल आवश्यक आहे';
-    if (!password) newErrors.password = 'पासवर्ड आवश्यक आहे';
+    if (!mobile.trim()) newErrors.mobile = t('error_mobile_required');
+    if (!password) newErrors.password = t('error_password_required');
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -42,7 +44,7 @@ export default function Login() {
         router.replace('/(tabs)');
       }
     } catch (err) {
-      setErrors({ form: 'An unexpected error occurred.' });
+      setErrors({ form: t('error_unexpected') });
     } finally {
       setLoading(false);
     }
@@ -53,8 +55,7 @@ export default function Login() {
   };
 
   const handleForgotPassword = () => {
-    // Temporary non-destructive interaction
-    console.log('Forgot password clicked');
+    router.push('/auth/reset-password');
   };
 
   return (
@@ -66,9 +67,9 @@ export default function Login() {
         <ScrollView contentContainerStyle={styles.scrollContent} bounces={false}>
           {/* Header */}
           <View style={styles.header}>
-            <AppText variant="headingLarge" style={styles.welcomeText}>स्वागत आहे 👋</AppText>
-            <AppText variant="headingLarge" style={styles.loginTitle}>लॉगिन करा</AppText>
-            <AppText variant="bodyMedium" style={styles.subtitle}>AaplaGaav मध्ये प्रवेश करा</AppText>
+            <AppText variant="headingLarge" style={styles.welcomeText}>{t('login_welcome')}</AppText>
+            <AppText variant="headingLarge" style={styles.loginTitle}>{t('login_title')}</AppText>
+            <AppText variant="bodyMedium" style={styles.subtitle}>{t('login_subtitle')}</AppText>
           </View>
 
           {/* Form Content */}
@@ -79,8 +80,8 @@ export default function Login() {
               </AppText>
             ) : null}
             <AppInput 
-              label="मोबाईल नंबर / ईमेल"
-              placeholder="उदा. 9876543210"
+              label={t('login_mobile_email')}
+              placeholder={t('login_mobile_placeholder')}
               value={mobile}
               onChangeText={(text) => {
                 setMobile(text);
@@ -93,8 +94,8 @@ export default function Login() {
             />
 
             <AppInput 
-              label="पासवर्ड"
-              placeholder="तुमचा पासवर्ड टाका"
+              label={t('login_password')}
+              placeholder={t('login_password_placeholder')}
               value={password}
               onChangeText={(text) => {
                 setPassword(text);
@@ -106,11 +107,11 @@ export default function Login() {
             />
 
             <TouchableOpacity style={styles.forgotPasswordContainer} onPress={handleForgotPassword} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <AppText variant="bodyMedium" style={styles.forgotPasswordText}>पासवर्ड विसरलात?</AppText>
+              <AppText variant="bodyMedium" style={styles.forgotPasswordText}>{t('login_forgot_password')}</AppText>
             </TouchableOpacity>
 
             <AppButton 
-              title={loading ? "लॉगिन करत आहे..." : "लॉगिन करा"} 
+              title={loading ? t('login_button_loading') : t('login_button')} 
               onPress={handleLogin} 
               style={styles.loginButton} 
               disabled={loading}
@@ -118,12 +119,12 @@ export default function Login() {
 
             <View style={styles.dividerContainer}>
               <View style={styles.dividerLine} />
-              <AppText variant="bodyMedium" style={styles.dividerText}>किंवा</AppText>
+              <AppText variant="bodyMedium" style={styles.dividerText}>{t('login_or')}</AppText>
               <View style={styles.dividerLine} />
             </View>
 
             <AppButton 
-              title="नोंदणी करा" 
+              title={t('login_register')} 
               onPress={handleRegister} 
               variant="outline" 
               disabled={loading}

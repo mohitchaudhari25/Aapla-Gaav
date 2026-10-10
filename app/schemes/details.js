@@ -24,7 +24,7 @@ export default function SchemeDetails() {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} onPress={() => router.back()} />
+          <Ionicons name="arrow-back" size={24} color={colors.text} onPress={() => router.canGoBack() ? router.back() : router.replace('/')} />
           <AppText variant="headingSmall" style={styles.headerTitle}>योजनेची माहिती</AppText>
           <View style={{ width: 24 }} />
         </View>

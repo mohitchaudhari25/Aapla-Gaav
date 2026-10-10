@@ -86,7 +86,7 @@ export default function ComplaintDetails() {
           title="तक्रार सापडली नाही."
           description={error || "कृपया परत जा आणि पुन्हा प्रयत्न करा."}
           buttonTitle="माझ्या तक्रारींकडे परत जा"
-          onButtonPress={() => router.back()}
+          onButtonPress={() => router.canGoBack() ? router.back() : router.replace('/')}
         />
       </ScreenContainer>
     );
@@ -102,7 +102,7 @@ export default function ComplaintDetails() {
     <ScreenContainer useSafeArea>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <AppText variant="headingMedium">तक्रार तपशील</AppText>
