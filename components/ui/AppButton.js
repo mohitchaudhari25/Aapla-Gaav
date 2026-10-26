@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, StyleSheet } from 'react-native';
+import { TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { colors, spacing, radius } from '../../constants';
 import AppText from './AppText';
 
@@ -37,11 +37,22 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+        userSelect: 'none',
+      },
+    }),
   },
   buttonOutline: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.primary,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
   disabled: {
     backgroundColor: colors.border,

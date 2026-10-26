@@ -1,6 +1,41 @@
 import { Stack } from 'expo-router';
+import { Platform } from 'react-native';
 import { ThemeProvider } from '../lib/ThemeContext';
 import '../lib/i18n';
+
+// Remove browser focus outline and tap highlight on Web across all buttons, cards, and sections
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const styleId = 'aapla-gaav-web-outline-reset';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      *, *::before, *::after {
+        outline: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+      }
+      *:focus, *:focus-visible, *:active {
+        outline: none !important;
+      }
+      button, [role="button"], a, input, select, textarea, [tabindex], div, section {
+        outline: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+      }
+      button:focus, button:focus-visible, button:active,
+      [role="button"]:focus, [role="button"]:focus-visible, [role="button"]:active,
+      a:focus, a:focus-visible, a:active,
+      input:focus, input:focus-visible, input:active,
+      select:focus, select:focus-visible, select:active,
+      textarea:focus, textarea:focus-visible, textarea:active,
+      [tabindex]:focus, [tabindex]:focus-visible, [tabindex]:active,
+      div:focus, div:focus-visible, div:active,
+      section:focus, section:focus-visible, section:active {
+        outline: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
 
 export default function RootLayout() {
   return (

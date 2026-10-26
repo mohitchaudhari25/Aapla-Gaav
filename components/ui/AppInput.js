@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TextInput, StyleSheet } from 'react-native';
+import { View, TextInput, StyleSheet, Platform } from 'react-native';
 import { colors, spacing, radius, typography } from '../../constants';
 import AppText from './AppText';
 
@@ -33,6 +33,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     ...typography.bodyMedium,
     color: colors.text,
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+      },
+    }),
   },
   inputError: {
     borderColor: colors.error,
