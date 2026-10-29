@@ -63,8 +63,8 @@ export default function VillageFunds() {
     }, [])
   );
 
-  const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
-  const totalSpent = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+  const totalIncome = transactions.filter(t => (t.transaction_type || t.type) === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
+  const totalSpent = transactions.filter(t => (t.transaction_type || t.type) === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
   const remaining = totalIncome - totalSpent;
   const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
 

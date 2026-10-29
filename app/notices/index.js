@@ -78,7 +78,7 @@ export default function Notices() {
                 key={notice.id}
                 title={notice.title}
                 date={formattedDate}
-                description={notice.description}
+                description={notice.content || notice.description}
                 style={notice.isRead ? styles.readCard : styles.unreadCard}
               />
             );

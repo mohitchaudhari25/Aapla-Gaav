@@ -132,8 +132,8 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
           .from('complaint_updates')
           .insert({
             complaint_id: selectedComplaint.id,
-            status: newStatus,
-            description: updateRemark.trim(),
+            new_status: newStatus,
+            update_text: updateRemark.trim(),
             created_at: new Date().toISOString(),
           });
 
@@ -533,12 +533,12 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <Badge status={up.status} />
+                        <Badge status={up.new_status || up.status} />
                         <span style={{ fontSize: '0.7rem', color: 'var(--color-muted-text)' }}>
                           {up.created_at ? new Date(up.created_at).toLocaleString(language === 'en' ? 'en-IN' : 'mr-IN') : ''}
                         </span>
                       </div>
-                      <div style={{ color: 'var(--color-text)' }}>{up.description}</div>
+                      <div style={{ color: 'var(--color-text)' }}>{up.update_text || up.description}</div>
                     </div>
                   ))}
                 </div>

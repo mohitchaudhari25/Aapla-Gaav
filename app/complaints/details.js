@@ -131,14 +131,14 @@ export default function ComplaintDetails() {
             <AppText variant="headingSmall" style={styles.sectionTitle}>अपडेट इतिहास</AppText>
             {updates.map((update) => (
               <View key={update.id} style={[styles.infoBox, { marginBottom: spacing.sm }]}>
-                {update.status && (
+                {(update.new_status || update.status) && (
                   <AppText variant="bodyMedium" style={{ fontWeight: 'bold', color: colors.primary, marginBottom: 2 }}>
-                    {update.status}
+                    {update.new_status || update.status}
                   </AppText>
                 )}
-                {update.description && (
+                {(update.update_text || update.description) && (
                   <AppText variant="bodyMedium" style={styles.descriptionText}>
-                    {update.description}
+                    {update.update_text || update.description}
                   </AppText>
                 )}
                 <AppText variant="bodySmall" style={{ color: colors.secondaryText, marginTop: 4 }}>

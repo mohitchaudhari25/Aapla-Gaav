@@ -57,9 +57,9 @@ export default function Profile() {
             if (complaints) {
               const stats = { total: complaints.length, new: 0, inProgress: 0, resolved: 0 };
               complaints.forEach(c => {
-                if (c.status === 'नवीन' || c.status === 'new' || c.status === 'submitted') stats.new++;
-                else if (c.status === 'प्रगतीपथावर' || c.status === 'in_progress') stats.inProgress++;
-                else if (c.status === 'सोडवली' || c.status === 'resolved') stats.resolved++;
+                if (c.status === 'नवीन' || c.status === 'new' || c.status === 'submitted' || c.status === 'प्राप्त') stats.new++;
+                else if (c.status === 'प्रगतीपथावर' || c.status === 'in_progress' || c.status === 'प्रक्रियेत') stats.inProgress++;
+                else if (c.status === 'सोडवली' || c.status === 'resolved' || c.status === 'सोडवले') stats.resolved++;
               });
               setComplaintStats(stats);
             }

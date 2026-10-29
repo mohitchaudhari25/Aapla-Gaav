@@ -55,55 +55,46 @@ export default function Home() {
                 .from('notices')
                 .select('*')
                 .eq('status', 'published')
-                .eq('village_id', profile.village_id) // Assuming we only want notices for their village
+                .eq('village_id', profile.village_id)
                 .order('created_at', { ascending: false })
                 .limit(2);
 
-              if (noticesData) {
-                setNotices([...noticesData, ...mockNotices].slice(0, 2));
+              if (noticesData && noticesData.length > 0) {
+                setNotices(noticesData);
               } else {
-                setNotices([...mockNotices].slice(0, 2));
+                setNotices([]);
               }
 
-              const { data: fundsData } = await supabase
+              const { data: fundsRows } = await supabase
                 .from('fund_transactions')
-                .select('type, amount')
+                .select('transaction_type, amount')
                 .eq('village_id', profile.village_id);
 
-              if (fundsData) {
-                const combinedFunds = [...fundsData, ...mockFunds];
-                const totalIncome = combinedFunds.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
-                const totalSpent = combinedFunds.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
-                const remaining = totalIncome - totalSpent;
-                const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
-                setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage });
-              } else {
-                const combinedFunds = [...mockFunds];
-                const totalIncome = combinedFunds.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
-                const totalSpent = combinedFunds.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
-                const remaining = totalIncome - totalSpent;
-                const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
-                setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage });
-              }
-            } else {
-              // Not logged in or no village_id, show demo data
-              setNotices([...mockNotices].slice(0, 2));
-              const combinedFunds = [...mockFunds];
-              const totalIncome = combinedFunds.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
-              const totalSpent = combinedFunds.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+              const txList = fundsRows || [];
+              const totalIncome = txList.filter(t => (t.transaction_type || t.type) === 'income').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+              const totalSpent = txList.filter(t => (t.transaction_type || t.type) === 'expense').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
               const remaining = totalIncome - totalSpent;
               const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
-              setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage });
+              setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage, hasData: txList.length > 0, isDemo: false });
+            } else {
+              // Guest or unassigned village mode: show clean sample preview without claiming false database state
+              setNotices(mockNotices.slice(0, 2));
+              const txList = mockFunds;
+              const totalIncome = txList.filter(t => t.type === 'income').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+              const totalSpent = txList.filter(t => t.type === 'expense').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+              const remaining = totalIncome - totalSpent;
+              const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
+              setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage, hasData: true, isDemo: true });
             }
           } else {
-            // Not logged in
-            setNotices([...mockNotices].slice(0, 2));
-            const combinedFunds = [...mockFunds];
-            const totalIncome = combinedFunds.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
-            const totalSpent = combinedFunds.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+            // Guest mode
+            setNotices(mockNotices.slice(0, 2));
+            const txList = mockFunds;
+            const totalIncome = txList.filter(t => t.type === 'income').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+            const totalSpent = txList.filter(t => t.type === 'expense').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
             const remaining = totalIncome - totalSpent;
             const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
-            setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage });
+            setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage, hasData: true, isDemo: true });
           }
         } catch (err) {
           console.error(err);
@@ -127,10 +118,10 @@ export default function Home() {
   const { width } = Dimensions.get('window');
   
   const schemeNews = [
-    { id: '1', title: 'शिलाई मशीन योजना', subtitle: 'पात्रता व अर्जाची माहिती', badge: t('home_scheme_badge') },
-    { id: '2', title: 'शेतकरी योजना', subtitle: 'अनुदान व सरकारी मदत', badge: t('home_agri_badge') },
-    { id: '3', title: 'पीएम किसान निधी', subtitle: 'सन्मान निधी', badge: t('home_fund_badge') },
-    { id: '4', title: 'नवीन घोषणा', subtitle: 'गावातील महत्त्वाच्या बातम्या', badge: t('home_news_badge') },
+    { id: '1', title: 'शासकीय शिलाई मशीन सहाय्य', subtitle: 'ग्रामीण महिला स्वयंरोजगार माहिती', badge: t('home_scheme_badge') },
+    { id: '2', title: 'महाडीबीटी कृषी योजना', subtitle: 'अवजारे व ठिबक सिंचन अनुदान', badge: t('home_agri_badge') },
+    { id: '3', title: 'पीएम किसान सन्मान निधी', subtitle: 'पात्रता व ई-केवायसी पडताळणी', badge: t('home_fund_badge') },
+    { id: '4', title: 'ग्रामसभा व विकास आराखडा', subtitle: 'ग्रामपंचायत ठराव व माहिती', badge: t('home_news_badge') },
   ];
 
   const styles = getStyles(colors);
@@ -228,7 +219,7 @@ export default function Home() {
                   key={notice.id}
                   title={notice.title}
                   date={formattedDate}
-                  description={notice.description}
+                  description={notice.content || notice.description}
                 />
               );
             })
@@ -247,12 +238,14 @@ export default function Home() {
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.contactsScroll}>
             {[
-              { id: '1', name: t('home_sarpanch'), phone: '98765-43210', icon: '👨‍💼' },
-              { id: '2', name: t('home_ambulance'), phone: '108', icon: '🚑' },
-              { id: '3', name: t('home_police'), phone: '100', icon: '👮' }
+              { id: '1', name: t('home_sarpanch'), phone: '98765-43210', iconName: 'person', iconColor: colors.primary },
+              { id: '2', name: t('home_ambulance'), phone: '108', iconName: 'medkit', iconColor: colors.error },
+              { id: '3', name: t('home_police'), phone: '100', iconName: 'shield-checkmark', iconColor: colors.info }
             ].map((contact) => (
               <TouchableOpacity key={contact.id} style={styles.contactCard} activeOpacity={0.7} onPress={() => router.push('/contacts')}>
-                <AppText style={styles.contactEmoji}>{contact.icon}</AppText>
+                <View style={[styles.contactIconWrapper, { backgroundColor: contact.iconColor + '18' }]}>
+                  <Ionicons name={contact.iconName} size={22} color={contact.iconColor} />
+                </View>
                 <AppText variant="label" style={styles.contactName}>{contact.name}</AppText>
                 <AppText variant="bodySmall" style={styles.contactPhone}>{contact.phone}</AppText>
               </TouchableOpacity>
@@ -525,17 +518,23 @@ const getStyles = (colors) => StyleSheet.create({
     width: 125,
     marginRight: spacing.md,
   },
-  contactEmoji: {
-    fontSize: 28,
+  contactIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.round,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: spacing.sm,
   },
   contactName: {
     color: colors.text,
     fontWeight: '600',
     marginBottom: 4,
+    textAlign: 'center',
   },
   contactPhone: {
     color: colors.primary,
     fontWeight: '500',
+    fontSize: 12,
   }
 });

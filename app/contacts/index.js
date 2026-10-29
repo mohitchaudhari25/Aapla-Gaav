@@ -37,8 +37,7 @@ export default function Contacts() {
               const { data, error } = await supabase
                 .from('contacts')
                 .select('*')
-                .eq('village_id', profile.village_id)
-                .eq('type', 'village'); // optional depending on if we have types
+                .eq('village_id', profile.village_id);
 
               if (error) {
                 setErrorMsg('संपर्क माहिती मिळवण्यात त्रुटी आली.');
