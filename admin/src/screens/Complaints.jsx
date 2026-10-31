@@ -76,6 +76,21 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
 
   useEffect(() => {
     fetchComplaints();
+
+    const channel = supabase
+      .channel('admin-complaints-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'complaints' },
+        () => {
+          fetchComplaints();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchComplaints]);
 
   // Open inspection modal & fetch complaint updates history
@@ -139,6 +154,24 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
 
         if (logErr) {
           console.warn('Could not log complaint update message:', logErr);
+        }
+      }
+
+      // 3. Notify the citizen directly in their mobile app
+      if (selectedComplaint.user_id) {
+        try {
+          await supabase
+            .from('notifications')
+            .insert({
+              user_id: selectedComplaint.user_id,
+              title: 'तक्रार अपडेट (Grievance Update)',
+              message: `तुमच्या तक्रार "${selectedComplaint.title}" ची स्थिती आता "${newStatus}" झाली आहे.${updateRemark.trim() ? ' शेरा: ' + updateRemark.trim() : ''}`,
+              type: 'complaint',
+              is_read: false,
+              created_at: new Date().toISOString(),
+            });
+        } catch (notifErr) {
+          console.warn('Could not dispatch citizen notification:', notifErr);
         }
       }
 

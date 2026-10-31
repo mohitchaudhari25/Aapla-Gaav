@@ -10,7 +10,9 @@ import {
   X, 
   FileText, 
   ShieldAlert,
-  ShieldCheck 
+  ShieldCheck,
+  Bell,
+  Send
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useSettings } from '../context/SettingsContext';
@@ -38,6 +40,14 @@ export default function Citizens() {
   const [selectedCitizen, setSelectedCitizen] = useState(null);
   const [citizenComplaints, setCitizenComplaints] = useState([]);
   const [loadingComplaints, setLoadingComplaints] = useState(false);
+
+  // Send Direct Notification state
+  const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
+  const [notifTitle, setNotifTitle] = useState('');
+  const [notifMessage, setNotifMessage] = useState('');
+  const [isSendingNotif, setIsSendingNotif] = useState(false);
+  const [notifSuccess, setNotifSuccess] = useState(null);
+  const [notifError, setNotifError] = useState(null);
 
   const fetchCitizensData = useCallback(async () => {
     setLoading(true);
@@ -91,7 +101,58 @@ export default function Citizens() {
 
   useEffect(() => {
     fetchCitizensData();
+
+    const channel = supabase
+      .channel('admin-citizens-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        fetchCitizensData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchCitizensData]);
+
+  const handleSendNotification = async (e) => {
+    e.preventDefault();
+    if (!selectedCitizen?.id) return;
+    if (!notifTitle.trim() || !notifMessage.trim()) {
+      setNotifError(language === 'en' ? 'Title and message are required.' : 'शीर्षक आणि संदेश आवश्यक आहेत.');
+      return;
+    }
+
+    setIsSendingNotif(true);
+    setNotifError(null);
+    setNotifSuccess(null);
+
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: selectedCitizen.id,
+          title: notifTitle.trim(),
+          message: notifMessage.trim(),
+          type: 'general',
+          is_read: false,
+          created_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+      setNotifSuccess(language === 'en' ? 'Notification sent successfully!' : 'सूचना यशस्वीरित्या पाठवली गेली!');
+      setNotifTitle('');
+      setNotifMessage('');
+      setTimeout(() => {
+        setIsNotifModalOpen(false);
+        setNotifSuccess(null);
+      }, 1000);
+    } catch (err) {
+      console.error('Send notification error:', err);
+      setNotifError(err.message || 'सूचना पाठवताना त्रुटी आली.');
+    } finally {
+      setIsSendingNotif(false);
+    }
+  };
 
   // Open details modal and fetch any complaints registered by this user
   const handleOpenDetails = async (citizen) => {
@@ -446,9 +507,25 @@ export default function Citizens() {
           title={t('citizens_modal_title')}
           maxWidth="600px"
           footer={
-            <Button variant="secondary" onClick={handleCloseDetails}>
-              {t('close_btn')}
-            </Button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+              <Button 
+                variant="primary" 
+                size="sm" 
+                onClick={() => {
+                  setNotifError(null);
+                  setNotifSuccess(null);
+                  setNotifTitle('');
+                  setNotifMessage('');
+                  setIsNotifModalOpen(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Bell size={15} /> {language === 'en' ? 'Send Notification' : 'सूचना पाठवा'}
+              </Button>
+              <Button variant="secondary" onClick={handleCloseDetails}>
+                {t('close_btn')}
+              </Button>
+            </div>
           }
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -609,6 +686,75 @@ export default function Citizens() {
               </span>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Direct Citizen In-App Notification Modal */}
+      {selectedCitizen && (
+        <Modal
+          isOpen={isNotifModalOpen}
+          onClose={() => setIsNotifModalOpen(false)}
+          title={language === 'en' ? `Send Notification to ${selectedCitizen.full_name || 'Citizen'}` : `${selectedCitizen.full_name || 'नागरिक'} यांना थेट सूचना पाठवा`}
+          maxWidth="480px"
+        >
+          <form onSubmit={handleSendNotification} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {notifError && <Alert variant="error" message={notifError} />}
+            {notifSuccess && <Alert variant="success" message={notifSuccess} />}
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: '4px', color: 'var(--color-text)' }}>
+                {language === 'en' ? 'Notification Title' : 'सूचनेचे शीर्षक'} *
+              </label>
+              <input
+                type="text"
+                required
+                value={notifTitle}
+                onChange={(e) => setNotifTitle(e.target.value)}
+                placeholder="उदा. ग्रामपंचायत कार्यालयीन सूचना"
+                style={{
+                  width: '100%',
+                  padding: '0.625rem',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.875rem'
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: '4px', color: 'var(--color-text)' }}>
+                {language === 'en' ? 'Message' : 'सूचनेचा मजकूर'} *
+              </label>
+              <textarea
+                required
+                rows={4}
+                value={notifMessage}
+                onChange={(e) => setNotifMessage(e.target.value)}
+                placeholder="नागरिकाला पाठवायचा संदेश येथे लिहा..."
+                style={{
+                  width: '100%',
+                  padding: '0.625rem',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.875rem',
+                  fontFamily: 'inherit'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '0.5rem' }}>
+              <Button variant="outline" size="sm" type="button" onClick={() => setIsNotifModalOpen(false)}>
+                {t('cancel')}
+              </Button>
+              <Button variant="primary" size="sm" type="submit" disabled={isSendingNotif}>
+                {isSendingNotif ? <LoadingSpinner size="sm" /> : (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Send size={14} /> {language === 'en' ? 'Send Now' : 'पाठवा'}
+                  </span>
+                )}
+              </Button>
+            </div>
+          </form>
         </Modal>
       )}
     </div>

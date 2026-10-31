@@ -10,6 +10,7 @@ import {
   Info 
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
@@ -24,6 +25,7 @@ const formatCurrency = (amount) => {
 };
 
 export default function Projects() {
+  const { villageId } = useAuth();
   const { language, t } = useSettings();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -74,6 +76,17 @@ export default function Projects() {
 
   useEffect(() => {
     fetchProjects();
+
+    const channel = supabase
+      .channel('admin-projects-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
+        fetchProjects();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchProjects]);
 
   // Open Create Modal
@@ -149,6 +162,7 @@ export default function Projects() {
             : `विकास काम '${formData.name}' यशस्वीरित्या अद्यतनित केले!`
         );
       } else {
+        payload.village_id = villageId || null;
         payload.created_at = new Date().toISOString();
 
         const { error: insertErr } = await supabase
@@ -156,6 +170,28 @@ export default function Projects() {
           .insert(payload);
 
         if (insertErr) throw insertErr;
+
+        // Broadcast notification to relevant citizens when new project is added
+        try {
+          let profQuery = supabase.from('profiles').select('id');
+          if (villageId) {
+            profQuery = profQuery.eq('village_id', villageId);
+          }
+          const { data: citizens } = await profQuery;
+          if (citizens && citizens.length > 0) {
+            const notifs = citizens.map((c) => ({
+              user_id: c.id,
+              title: 'नवीन विकास काम (New Development Work)',
+              message: `गावात नवीन विकास काम सुरू: "${formData.name.trim()}"`,
+              type: 'project',
+              is_read: false,
+              created_at: new Date().toISOString(),
+            }));
+            await supabase.from('notifications').insert(notifs);
+          }
+        } catch (notifErr) {
+          console.warn('Project broadcast error:', notifErr);
+        }
 
         setActionSuccessMsg(
           language === 'en'

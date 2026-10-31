@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, SafeAreaView, Platform, StatusBar } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius } from '../../constants';

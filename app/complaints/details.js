@@ -28,15 +28,19 @@ export default function ComplaintDetails() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchDetails = async () => {
       try {
         setLoading(true);
         if (id && typeof id === 'string' && id.startsWith('demo-')) {
           const demoComplaint = mockComplaints.find(c => c.id === id);
           if (demoComplaint) {
-            setComplaint(demoComplaint);
-            setUpdates(mockComplaintUpdates[id] || []);
-            setLoading(false);
+            if (isMounted) {
+              setComplaint(demoComplaint);
+              setUpdates(mockComplaintUpdates[id] || []);
+              setLoading(false);
+            }
             return;
           }
         }
@@ -48,7 +52,7 @@ export default function ComplaintDetails() {
           .single();
 
         if (complaintError) throw complaintError;
-        setComplaint(complaintData);
+        if (isMounted) setComplaint(complaintData);
 
         const { data: updatesData, error: updatesError } = await supabase
           .from('complaint_updates')
@@ -56,18 +60,47 @@ export default function ComplaintDetails() {
           .eq('complaint_id', id)
           .order('created_at', { ascending: true });
 
-        if (updatesError) throw updatesError;
-        setUpdates(updatesData || []);
+        if (updatesError) {
+          console.warn('Complaint updates fetch warning:', updatesError);
+        }
+        if (isMounted) setUpdates(updatesData || []);
       } catch (err) {
-        console.error(err);
-        setError('माहिती लोड करताना त्रुटी आली.');
+        console.error('Error fetching complaint details:', err);
+        if (isMounted) setError('माहिती लोड करताना त्रुटी आली.');
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     if (id) {
       fetchDetails();
+
+      // Realtime subscription for complaint status and update timeline
+      const detailsChannel = supabase.channel(`complaint-${id}-channel`)
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'complaints', 
+          filter: `id=eq.${id}` 
+        }, (payload) => {
+          if (payload.new && isMounted) {
+            setComplaint(prev => ({ ...prev, ...payload.new }));
+          }
+        })
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'complaint_updates', 
+          filter: `complaint_id=eq.${id}` 
+        }, () => {
+          fetchDetails();
+        })
+        .subscribe();
+
+      return () => {
+        isMounted = false;
+        supabase.removeChannel(detailsChannel);
+      };
     }
   }, [id]);
 

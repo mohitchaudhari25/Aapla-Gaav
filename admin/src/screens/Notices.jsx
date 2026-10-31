@@ -12,6 +12,7 @@ import {
   Info 
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
@@ -21,6 +22,7 @@ import EmptyState from '../components/ui/EmptyState';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 export default function Notices() {
+  const { villageId } = useAuth();
   const { language, t } = useSettings();
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +68,17 @@ export default function Notices() {
 
   useEffect(() => {
     fetchNotices();
+
+    const channel = supabase
+      .channel('admin-notices-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notices' }, () => {
+        fetchNotices();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchNotices]);
 
   // Open Create Modal
@@ -127,6 +140,7 @@ export default function Notices() {
         );
       } else {
         const payload = {
+          village_id: villageId || null,
           title: formData.title.trim(),
           content: formData.content.trim(),
           status: formData.status,
@@ -139,6 +153,30 @@ export default function Notices() {
           .insert(payload);
 
         if (insertErr) throw insertErr;
+
+        // Broadcast notification to relevant citizens when notice is published
+        if (formData.status === 'published') {
+          try {
+            let profQuery = supabase.from('profiles').select('id');
+            if (villageId) {
+              profQuery = profQuery.eq('village_id', villageId);
+            }
+            const { data: citizens } = await profQuery;
+            if (citizens && citizens.length > 0) {
+              const notifs = citizens.map((c) => ({
+                user_id: c.id,
+                title: 'नवीन सूचना (New Circular)',
+                message: formData.title.trim(),
+                type: 'notice',
+                is_read: false,
+                created_at: new Date().toISOString(),
+              }));
+              await supabase.from('notifications').insert(notifs);
+            }
+          } catch (notifErr) {
+            console.warn('Notice broadcast error:', notifErr);
+          }
+        }
 
         setActionSuccessMsg(
           language === 'en'

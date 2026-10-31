@@ -137,6 +137,18 @@ export default function Reports() {
 
   useEffect(() => {
     fetchReportData();
+
+    const channel = supabase
+      .channel('admin-reports-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints' }, () => fetchReportData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notices' }, () => fetchReportData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => fetchReportData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'villages' }, () => fetchReportData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchReportData]);
 
   // Date and Village filter helper

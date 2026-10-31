@@ -23,43 +23,97 @@ export default function VillageFunds() {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
+      let channel = null;
+
       const fetchFunds = async () => {
         setLoading(true);
         setErrorMsg(null);
         try {
           const { data: { user } } = await supabase.auth.getUser();
+          let targetVillageId = null;
+
           if (user) {
             const { data: profile } = await supabase
               .from('profiles')
               .select('village_id')
               .eq('id', user.id)
-              .single();
-              
-            if (profile?.village_id) {
-              const { data, error } = await supabase
-                .from('fund_transactions')
-                .select('*')
-                .eq('village_id', profile.village_id)
-                .order('transaction_date', { ascending: false });
-                
-              if (error) {
-                setErrorMsg('निधीची माहिती मिळवण्यात त्रुटी आली.');
-              } else if (data) {
-                setTransactions([...data, ...mockFunds]);
-              }
-            } else {
-               setTransactions([...mockFunds]);
+              .maybeSingle();
+
+            targetVillageId = profile?.village_id;
+          }
+
+          if (!targetVillageId) {
+            const { data: defaultVillage } = await supabase
+              .from('villages')
+              .select('id')
+              .limit(1)
+              .maybeSingle();
+
+            if (defaultVillage) {
+              targetVillageId = defaultVillage.id;
             }
           }
+
+          const loadTransactions = async () => {
+            let query = supabase
+              .from('fund_transactions')
+              .select('*')
+              .order('transaction_date', { ascending: false });
+
+            if (targetVillageId) {
+              query = query.eq('village_id', targetVillageId);
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+              console.error('Funds fetch error:', error);
+              if (isMounted) setErrorMsg('निधीची माहिती मिळवण्यात त्रुटी आली.');
+            } else if (data && isMounted) {
+              if (data.length > 0) {
+                setTransactions(data);
+              } else if (!user) {
+                setTransactions(mockFunds);
+              } else {
+                setTransactions([]);
+              }
+            }
+          };
+
+          await loadTransactions();
+
+          // Realtime listener for live funds changes
+          channel = supabase
+            .channel('village-funds-changes')
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'fund_transactions',
+              },
+              () => {
+                loadTransactions();
+              }
+            )
+            .subscribe();
         } catch (error) {
-          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+          if (isMounted) setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
           console.error(error);
         } finally {
-          setLoading(false);
+          if (isMounted) setLoading(false);
         }
       };
-      
+
       fetchFunds();
+
+      return () => {
+        isMounted = false;
+        if (channel) {
+          supabase.removeChannel(channel);
+        }
+      };
     }, [])
   );
 
@@ -126,28 +180,31 @@ export default function VillageFunds() {
         ) : transactions.length === 0 ? (
           <EmptyState title="सध्या निधीची माहिती उपलब्ध नाही." />
         ) : (
-          transactions.map((tx) => (
-            <View 
-              key={tx.id}
-              style={styles.projectCard}
-            >
-              <View style={styles.projectHeader}>
-                <View style={[styles.projectIconWrapper, { backgroundColor: tx.type === 'income' ? colors.success + '20' : colors.error + '20' }]}>
-                  <Ionicons name={tx.type === 'income' ? 'arrow-down-outline' : 'arrow-up-outline'} size={20} color={tx.type === 'income' ? colors.success : colors.error} />
+          transactions.map((tx) => {
+            const isIncome = (tx.transaction_type || tx.type) === 'income';
+            return (
+              <View 
+                key={tx.id}
+                style={styles.projectCard}
+              >
+                <View style={styles.projectHeader}>
+                  <View style={[styles.projectIconWrapper, { backgroundColor: isIncome ? colors.success + '20' : colors.error + '20' }]}>
+                    <Ionicons name={isIncome ? 'arrow-down-outline' : 'arrow-up-outline'} size={20} color={isIncome ? colors.success : colors.error} />
+                  </View>
+                  <AppText variant="headingSmall" style={styles.projectName}>{tx.description}</AppText>
                 </View>
-                <AppText variant="headingSmall" style={styles.projectName}>{tx.description}</AppText>
+                
+                <View style={styles.projectAmounts}>
+                  <AppText variant="bodyMedium" style={[styles.projectSpent, { color: isIncome ? colors.success : colors.error }]}>
+                    {isIncome ? '+' : '-'}{formatCurrency(tx.amount)}
+                  </AppText>
+                  <AppText variant="label" style={styles.projectBudget}>
+                    {tx.transaction_date ? new Date(tx.transaction_date).toLocaleDateString('en-GB') : '-'}
+                  </AppText>
+                </View>
               </View>
-              
-              <View style={styles.projectAmounts}>
-                <AppText variant="bodyMedium" style={[styles.projectSpent, { color: tx.type === 'income' ? colors.success : colors.error }]}>
-                  {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
-                </AppText>
-                <AppText variant="label" style={styles.projectBudget}>
-                  {new Date(tx.transaction_date).toLocaleDateString('en-GB')}
-                </AppText>
-              </View>
-            </View>
-          ))
+            );
+          })
         )}
 
       </ScrollView>

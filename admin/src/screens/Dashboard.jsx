@@ -10,7 +10,9 @@ import {
   MapPin,
   Bell,
   Building2,
-  BarChart3
+  BarChart3,
+  Wallet,
+  Receipt
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +43,7 @@ export default function Dashboard({
   });
   const [noticesStats, setNoticesStats] = useState({ total: 0, published: 0 });
   const [projectsStats, setProjectsStats] = useState({ total: 0, ongoing: 0 });
+  const [fundsStats, setFundsStats] = useState({ totalIncome: 0, totalExpense: 0, balance: 0 });
   const [recentComplaints, setRecentComplaints] = useState([]);
   const [villageData, setVillageData] = useState(null);
 
@@ -106,6 +109,16 @@ export default function Dashboard({
           ongoing: projectsData.filter(p => p.status === 'चालू').length,
         });
       }
+
+      // 6. Fetch fund transactions summary
+      const { data: fundsData } = await supabase
+        .from('fund_transactions')
+        .select('amount, transaction_type');
+      if (fundsData) {
+        const inc = fundsData.filter(f => (f.transaction_type || f.type) === 'income').reduce((s, f) => s + (Number(f.amount) || 0), 0);
+        const exp = fundsData.filter(f => (f.transaction_type || f.type) === 'expense').reduce((s, f) => s + (Number(f.amount) || 0), 0);
+        setFundsStats({ totalIncome: inc, totalExpense: exp, balance: inc - exp });
+      }
     } catch (err) {
       console.error('Error loading dashboard data:', err);
       setError(err.message || 'डॅशबोर्ड डेटा लोड करताना त्रुटी आली. (Failed to load dashboard data)');
@@ -116,6 +129,19 @@ export default function Dashboard({
 
   useEffect(() => {
     fetchDashboardData();
+
+    const channel = supabase
+      .channel('admin-dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints' }, () => fetchDashboardData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notices' }, () => fetchDashboardData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => fetchDashboardData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_transactions' }, () => fetchDashboardData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'villages' }, () => fetchDashboardData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchDashboardData]);
 
   if (loading) {

@@ -8,7 +8,6 @@ import ProjectCard from '../../components/cards/ProjectCard';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
-import { mockProjects } from '../../data/mockData';
 
 export default function Projects() {
   const router = useRouter();
@@ -17,40 +16,59 @@ export default function Projects() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
 
+  const fetchProjects = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      let villageId = null;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('village_id')
+          .eq('id', user.id)
+          .maybeSingle();
+        villageId = profile?.village_id;
+      }
+
+      if (!villageId) {
+        const { data: vList } = await supabase.from('villages').select('id').limit(1);
+        if (vList && vList.length > 0) villageId = vList[0].id;
+      }
+          
+      let query = supabase.from('projects').select('*');
+      if (villageId) {
+        query = query.or(`village_id.eq.${villageId},village_id.is.null`);
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) {
+        setErrorMsg('विकास कामाची माहिती मिळवण्यात त्रुटी आली.');
+      } else {
+        setProjects(data || []);
+      }
+    } catch (error) {
+      setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
-      const fetchProjects = async () => {
-        setLoading(true);
-        setErrorMsg(null);
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('village_id')
-              .eq('id', user.id)
-              .single();
-              
-            let query = supabase.from('projects').select('*');
-            if (profile?.village_id) {
-              query = query.eq('village_id', profile.village_id);
-            }
-            const { data, error } = await query;
-              if (error) {
-              setErrorMsg('विकास कामाची माहिती मिळवण्यात त्रुटी आली.');
-            } else if (data) {
-              setProjects([...data, ...mockProjects]);
-            }
-          }
-        } catch (error) {
-          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
-          console.error(error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      
+      let isMounted = true;
       fetchProjects();
+
+      const projectsChannel = supabase.channel('projects-realtime-feed')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
+          if (isMounted) fetchProjects();
+        })
+        .subscribe();
+
+      return () => {
+        isMounted = false;
+        supabase.removeChannel(projectsChannel);
+      };
     }, [])
   );
 

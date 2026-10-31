@@ -51,52 +51,75 @@ function VillageEditModalDialog({ onClose, village, onSaveSuccess }) {
 
     try {
       const updatedRecord = {
-        ...formData,
+        name: formData.name.trim(),
+        gram_panchayat: formData.gram_panchayat.trim(),
+        taluka: formData.taluka.trim(),
+        district: formData.district.trim(),
+        state: formData.state.trim(),
+        population: formData.population.trim(),
+        families: formData.families.trim(),
+        houses: formData.houses.trim(),
+        area: formData.area.trim(),
+        office_name: formData.office_name.trim(),
+        timings: formData.timings.trim(),
+        weekly_off: formData.weekly_off.trim(),
         updated_at: new Date().toISOString(),
       };
 
-      // 1. Attempt to update/upsert into Supabase villages table
-      if (village?.id) {
-        try {
-          const { error } = await supabase
+      const isUuid = village?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(village.id);
+      let savedVillage = null;
+
+      if (isUuid) {
+        const { data, error } = await supabase
+          .from('villages')
+          .update(updatedRecord)
+          .eq('id', village.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        savedVillage = data;
+      } else {
+        // Check if there is an existing village record in DB first
+        const { data: existingVillage } = await supabase
+          .from('villages')
+          .select('*')
+          .limit(1)
+          .maybeSingle();
+
+        if (existingVillage) {
+          const { data, error } = await supabase
             .from('villages')
             .update(updatedRecord)
-            .eq('id', village.id);
+            .eq('id', existingVillage.id)
+            .select()
+            .single();
 
-          if (error) {
-            console.warn('Supabase update error (trying localStorage fallback):', error);
-          }
-        } catch (err) {
-          console.warn('Network/Supabase error:', err);
+          if (error) throw error;
+          savedVillage = data;
+        } else {
+          // Insert new village into database
+          const { data, error } = await supabase
+            .from('villages')
+            .insert(updatedRecord)
+            .select()
+            .single();
+
+          if (error) throw error;
+          savedVillage = data;
         }
       }
 
-      // 2. Always persist to localStorage for instant local reactivity and offline safety
-      try {
-        const fullVillageRecord = {
-          ...(village || {}),
-          ...updatedRecord,
-          id: village?.id || 'demo-village-1',
-        };
-        localStorage.setItem('aapla_custom_village_info', JSON.stringify(fullVillageRecord));
-      } catch (storageErr) {
-        console.warn('LocalStorage save error:', storageErr);
-      }
-
       setSuccessMsg(t('village_saved_success'));
-      if (onSaveSuccess) {
-        onSaveSuccess({
-          ...(village || {}),
-          ...updatedRecord,
-          id: village?.id || 'demo-village-1',
-        });
+      if (onSaveSuccess && savedVillage) {
+        onSaveSuccess(savedVillage);
       }
 
       setTimeout(() => {
         onClose();
       }, 700);
     } catch (err) {
-      console.error('Error saving village info:', err);
+      console.error('Error saving village info to database:', err);
       setErrorMsg(err.message || (language === 'en' ? 'Failed to save village information.' : 'गाव माहिती जतन करताना त्रुटी आली.'));
     } finally {
       setSaving(false);

@@ -18,47 +18,96 @@ export default function Village() {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
+      let channel = null;
+
       const fetchVillage = async () => {
         setLoading(true);
         setErrorMsg(null);
         try {
           const { data: { user } } = await supabase.auth.getUser();
+          let targetVillageId = null;
+
           if (user) {
             const { data: profile } = await supabase
               .from('profiles')
               .select('village_id')
               .eq('id', user.id)
-              .single();
+              .maybeSingle();
 
-            if (profile?.village_id) {
-              const { data, error } = await supabase
-                .from('villages')
-                .select('*')
-                .eq('id', profile.village_id)
-                .single();
+            targetVillageId = profile?.village_id;
+          }
 
-              if (error) {
-                setErrorMsg('गावाची माहिती मिळवण्यात त्रुटी आली.');
-              } else if (data) {
-                setVillage(data);
-              } else {
-                setVillage(mockVillage);
-              }
-            } else {
-              setVillage(mockVillage); // fallback to demo data
+          if (!targetVillageId) {
+            // Find first village in database if profile has no village_id
+            const { data: defaultVillage } = await supabase
+              .from('villages')
+              .select('*')
+              .limit(1)
+              .maybeSingle();
+
+            if (defaultVillage) {
+              targetVillageId = defaultVillage.id;
+              if (isMounted) setVillage(defaultVillage);
             }
-          } else {
-            setErrorMsg('कृपया लॉगिन करा.');
+          }
+
+          if (targetVillageId) {
+            const { data, error } = await supabase
+              .from('villages')
+              .select('*')
+              .eq('id', targetVillageId)
+              .maybeSingle();
+
+            if (error) {
+              console.error('Village fetch error:', error);
+              if (isMounted) setErrorMsg('गावाची माहिती मिळवण्यात त्रुटी आली.');
+            } else if (data && isMounted) {
+              setVillage(data);
+            }
+          } else if (isMounted) {
+            // Fallback to mock only if database has 0 villages
+            setVillage(mockVillage);
+          }
+
+          // Realtime listener for live updates from admin panel
+          if (targetVillageId) {
+            channel = supabase
+              .channel(`village-detail-${targetVillageId}`)
+              .on(
+                'postgres_changes',
+                {
+                  event: '*',
+                  schema: 'public',
+                  table: 'villages',
+                  filter: `id=eq.${targetVillageId}`,
+                },
+                (payload) => {
+                  if (payload.eventType === 'DELETE') {
+                    if (isMounted) setVillage(null);
+                  } else if (payload.new && isMounted) {
+                    setVillage(payload.new);
+                  }
+                }
+              )
+              .subscribe();
           }
         } catch (error) {
-          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+          if (isMounted) setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
           console.error(error);
         } finally {
-          setLoading(false);
+          if (isMounted) setLoading(false);
         }
       };
 
       fetchVillage();
+
+      return () => {
+        isMounted = false;
+        if (channel) {
+          supabase.removeChannel(channel);
+        }
+      };
     }, [])
   );
 

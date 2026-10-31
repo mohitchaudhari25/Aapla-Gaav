@@ -21,44 +21,93 @@ export default function Contacts() {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
+      let channel = null;
+
       const fetchContacts = async () => {
         setLoading(true);
         setErrorMsg(null);
         try {
           const { data: { user } } = await supabase.auth.getUser();
+          let targetVillageId = null;
+
           if (user) {
             const { data: profile } = await supabase
               .from('profiles')
               .select('village_id')
               .eq('id', user.id)
-              .single();
+              .maybeSingle();
 
-            if (profile?.village_id) {
-              const { data, error } = await supabase
-                .from('contacts')
-                .select('*')
-                .eq('village_id', profile.village_id);
-
-              if (error) {
-                setErrorMsg('संपर्क माहिती मिळवण्यात त्रुटी आली.');
-              } else if (data) {
-                setVillageContacts([...data, ...mockContacts]);
-              }
-            } else {
-               setVillageContacts([...mockContacts]);
-            }
-          } else {
-             setErrorMsg('कृपया लॉगिन करा.');
+            targetVillageId = profile?.village_id;
           }
+
+          if (!targetVillageId) {
+            const { data: defaultVillage } = await supabase
+              .from('villages')
+              .select('id')
+              .limit(1)
+              .maybeSingle();
+
+            if (defaultVillage) {
+              targetVillageId = defaultVillage.id;
+            }
+          }
+
+          const loadContacts = async () => {
+            let query = supabase.from('contacts').select('*');
+            if (targetVillageId) {
+              query = query.eq('village_id', targetVillageId);
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+              console.error('Contacts fetch error:', error);
+              if (isMounted) setErrorMsg('संपर्क माहिती मिळवण्यात त्रुटी आली.');
+            } else if (data && isMounted) {
+              if (data.length > 0) {
+                setVillageContacts(data);
+              } else if (!user) {
+                setVillageContacts(mockContacts);
+              } else {
+                setVillageContacts([]);
+              }
+            }
+          };
+
+          await loadContacts();
+
+          // Realtime listener for contacts changes
+          channel = supabase
+            .channel('contacts-channel')
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'contacts',
+              },
+              () => {
+                loadContacts();
+              }
+            )
+            .subscribe();
         } catch (error) {
-          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+          if (isMounted) setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
           console.error(error);
         } finally {
-          setLoading(false);
+          if (isMounted) setLoading(false);
         }
       };
 
       fetchContacts();
+
+      return () => {
+        isMounted = false;
+        if (channel) {
+          supabase.removeChannel(channel);
+        }
+      };
     }, [])
   );
 

@@ -40,7 +40,26 @@ export default function Login() {
 
       if (error) {
         setErrors({ form: error.message });
-      } else {
+      } else if (data?.user) {
+        // Ensure profile exists in profiles table
+        try {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('id', data.user.id)
+            .maybeSingle();
+
+          if (!prof) {
+            await supabase.from('profiles').insert({
+              id: data.user.id,
+              full_name: data.user.user_metadata?.full_name || 'Citizen',
+              role: 'citizen',
+            });
+          }
+        } catch (pErr) {
+          console.warn('Profile self-healing note:', pErr);
+        }
+
         router.replace('/(tabs)');
       }
     } catch (err) {
@@ -68,7 +87,6 @@ export default function Login() {
           {/* Header */}
           <View style={styles.header}>
             <AppText variant="headingLarge" style={styles.welcomeText}>{t('login_welcome')}</AppText>
-            <AppText variant="headingLarge" style={styles.loginTitle}>{t('login_title')}</AppText>
             <AppText variant="bodyMedium" style={styles.subtitle}>{t('login_subtitle')}</AppText>
           </View>
 
@@ -152,11 +170,8 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: radius.xl,
   },
   welcomeText: {
-    color: colors.primaryPale,
-    marginBottom: spacing.xs,
-  },
-  loginTitle: {
     color: colors.white,
+    fontWeight: 'bold',
     marginBottom: spacing.xs,
   },
   subtitle: {

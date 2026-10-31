@@ -37,6 +37,8 @@ export default function ProjectDetails() {
   const [errorMsg, setErrorMsg] = useState(null);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchProject = async () => {
       setLoading(true);
       setErrorMsg(null);
@@ -44,8 +46,10 @@ export default function ProjectDetails() {
         if (id && typeof id === 'string' && id.startsWith('demo-')) {
           const demoProject = mockProjects.find(p => p.id === id);
           if (demoProject) {
-            setProject(demoProject);
-            setLoading(false);
+            if (isMounted) {
+              setProject(demoProject);
+              setLoading(false);
+            }
             return;
           }
         }
@@ -57,20 +61,38 @@ export default function ProjectDetails() {
           .single();
           
         if (error) {
-          setErrorMsg('विकास कामाची माहिती मिळवण्यात त्रुटी आली.');
+          if (isMounted) setErrorMsg('विकास कामाची माहिती मिळवण्यात त्रुटी आली.');
         } else if (data) {
-          setProject(data);
+          if (isMounted) setProject(data);
         }
       } catch (err) {
-        setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+        if (isMounted) setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
         console.error(err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
     
     if (id) {
       fetchProject();
+
+      const projDetailChannel = supabase.channel(`project-${id}-channel`)
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'projects', 
+          filter: `id=eq.${id}` 
+        }, (payload) => {
+          if (payload.new && isMounted) {
+            setProject(prev => ({ ...prev, ...payload.new }));
+          }
+        })
+        .subscribe();
+
+      return () => {
+        isMounted = false;
+        supabase.removeChannel(projDetailChannel);
+      };
     }
   }, [id]);
 

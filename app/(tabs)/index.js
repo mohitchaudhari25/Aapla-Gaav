@@ -1,12 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Platform, StatusBar, ActivityIndicator, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, ActivityIndicator, Dimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, radius } from '../../constants';
 import AppText from '../../components/ui/AppText';
 import NoticeCard from '../../components/cards/NoticeCard';
 import { supabase } from '../../lib/supabase';
-import { mockNotices, mockFunds, mockVillage } from '../../data/mockData';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../../lib/ThemeContext';
 
@@ -24,6 +24,9 @@ export default function Home() {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
+      let activeVillageId = null;
+
       const fetchNoticesAndFunds = async () => {
         try {
           setLoadingNotices(true);
@@ -35,76 +38,100 @@ export default function Home() {
               .from('profiles')
               .select('village_id, full_name')
               .eq('id', user.id)
-              .single();
+              .maybeSingle();
 
             if (profile) {
-              setUserName(profile.full_name || '');
-              if (profile.village_id) {
-                const { data: village } = await supabase
-                  .from('villages')
-                  .select('name')
-                  .eq('id', profile.village_id)
-                  .single();
-                  
-                if (village) setVillageName(village.name);
-              }
+              if (isMounted) setUserName(profile.full_name || '');
+              activeVillageId = profile.village_id;
             }
 
-            if (profile?.village_id) {
+            // If profile has no village assigned yet, resolve the primary village from database
+            if (!activeVillageId) {
+              const { data: vList } = await supabase.from('villages').select('id, name').limit(1);
+              if (vList && vList.length > 0) {
+                activeVillageId = vList[0].id;
+                if (isMounted) setVillageName(vList[0].name);
+                // Auto-associate profile with primary village if unassigned
+                await supabase.from('profiles').update({ village_id: activeVillageId }).eq('id', user.id);
+              }
+            } else {
+              const { data: village } = await supabase
+                .from('villages')
+                .select('name')
+                .eq('id', activeVillageId)
+                .maybeSingle();
+                
+              if (village && isMounted) setVillageName(village.name);
+            }
+
+            if (activeVillageId) {
               const { data: noticesData } = await supabase
                 .from('notices')
                 .select('*')
                 .eq('status', 'published')
-                .eq('village_id', profile.village_id)
+                .or(`village_id.eq.${activeVillageId},village_id.is.null`)
                 .order('created_at', { ascending: false })
                 .limit(2);
 
-              if (noticesData && noticesData.length > 0) {
-                setNotices(noticesData);
-              } else {
-                setNotices([]);
+              if (isMounted) {
+                setNotices(noticesData || []);
               }
 
               const { data: fundsRows } = await supabase
                 .from('fund_transactions')
                 .select('transaction_type, amount')
-                .eq('village_id', profile.village_id);
+                .eq('village_id', activeVillageId);
 
               const txList = fundsRows || [];
               const totalIncome = txList.filter(t => (t.transaction_type || t.type) === 'income').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
               const totalSpent = txList.filter(t => (t.transaction_type || t.type) === 'expense').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
               const remaining = totalIncome - totalSpent;
               const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
-              setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage, hasData: txList.length > 0, isDemo: false });
+              if (isMounted) {
+                setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage, hasData: txList.length > 0, isDemo: false });
+              }
             } else {
-              // Guest or unassigned village mode: show clean sample preview without claiming false database state
-              setNotices(mockNotices.slice(0, 2));
-              const txList = mockFunds;
-              const totalIncome = txList.filter(t => t.type === 'income').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-              const totalSpent = txList.filter(t => t.type === 'expense').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-              const remaining = totalIncome - totalSpent;
-              const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
-              setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage, hasData: true, isDemo: true });
+              if (isMounted) {
+                setNotices([]);
+                setFundsData({ totalIncome: 0, totalSpent: 0, remaining: 0, spendingPercentage: 0, hasData: false, isDemo: false });
+              }
             }
           } else {
             // Guest mode
-            setNotices(mockNotices.slice(0, 2));
-            const txList = mockFunds;
-            const totalIncome = txList.filter(t => t.type === 'income').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-            const totalSpent = txList.filter(t => t.type === 'expense').reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-            const remaining = totalIncome - totalSpent;
-            const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
-            setFundsData({ totalIncome, totalSpent, remaining, spendingPercentage, hasData: true, isDemo: true });
+            if (isMounted) {
+              setNotices([]);
+              setFundsData({ totalIncome: 0, totalSpent: 0, remaining: 0, spendingPercentage: 0, hasData: false, isDemo: false });
+            }
           }
         } catch (err) {
-          console.error(err);
+          console.warn('Error loading home data:', err);
         } finally {
-          setLoadingNotices(false);
-          setLoadingFunds(false);
+          if (isMounted) {
+            setLoadingNotices(false);
+            setLoadingFunds(false);
+          }
         }
       };
 
       fetchNoticesAndFunds();
+
+      // Realtime subscription for notices and fund transactions
+      const homeChannel = supabase.channel('home-updates')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notices' }, () => {
+          fetchNoticesAndFunds();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_transactions' }, () => {
+          fetchNoticesAndFunds();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'villages' }, () => {
+          fetchNoticesAndFunds();
+        })
+        .subscribe();
+
+      return () => {
+        isMounted = false;
+        supabase.removeChannel(homeChannel);
+      };
     }, [])
   );
 

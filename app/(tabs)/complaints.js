@@ -8,7 +8,6 @@ import AppButton from '../../components/ui/AppButton';
 import AppText from '../../components/ui/AppText';
 import { spacing, colors } from '../../constants';
 import { supabase } from '../../lib/supabase';
-import { mockComplaints } from '../../data/mockData';
 
 export default function Complaints() {
   const router = useRouter();
@@ -30,7 +29,7 @@ export default function Complaints() {
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
-      setComplaints([...(data || []), ...mockComplaints]);
+      setComplaints(data || []);
     } catch (err) {
       setError('तक्रारी लोड करताना त्रुटी आली. कृपया पुन्हा प्रयत्न करा.');
       console.error(err);
@@ -41,7 +40,19 @@ export default function Complaints() {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
       fetchComplaints();
+
+      const complaintChannel = supabase.channel('citizen-complaints-updates')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints' }, () => {
+          if (isMounted) fetchComplaints();
+        })
+        .subscribe();
+
+      return () => {
+        isMounted = false;
+        supabase.removeChannel(complaintChannel);
+      };
     }, [])
   );
 
