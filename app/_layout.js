@@ -11,6 +11,14 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
     const style = document.createElement('style');
     style.id = styleId;
     style.textContent = `
+      html, body, #root {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+      }
       *, *::before, *::after {
         outline: none !important;
         -webkit-tap-highlight-color: transparent !important;

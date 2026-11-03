@@ -369,22 +369,13 @@ export default function Reports() {
               <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
                 {t('reports_title')}
               </h1>
-              <p style={{ fontSize: '0.875rem', color: 'var(--color-secondary-text)', marginTop: '2px' }}>
-                {t('reports_sub')}
-              </p>
+              
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Button
-            variant="secondary"
-            icon={RefreshCw}
-            onClick={fetchReportData}
-            disabled={loading}
-          >
-            {t('refresh_btn')}
-          </Button>
+          
 
           {/* Export Action */}
           <Button
@@ -660,9 +651,7 @@ export default function Reports() {
                     <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)' }}>
                       {t('reports_complaint_analytics_title')}
                     </h3>
-                    <p style={{ fontSize: '0.8125rem', color: 'var(--color-secondary-text)', marginTop: '2px' }}>
-                      {t('reports_complaint_analytics_sub')}
-                    </p>
+                    
                   </div>
                   <Button
                     variant="outline-primary"
@@ -757,9 +746,7 @@ export default function Reports() {
                     <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)' }}>
                       {t('reports_project_analytics_title')}
                     </h3>
-                    <p style={{ fontSize: '0.8125rem', color: 'var(--color-secondary-text)', marginTop: '2px' }}>
-                      {t('reports_project_analytics_sub')}
-                    </p>
+                    
                   </div>
                   <Button
                     variant="outline-primary"
@@ -870,9 +857,7 @@ export default function Reports() {
                     <h3 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--color-text)' }}>
                       {t('reports_notice_analytics_title')}
                     </h3>
-                    <p style={{ fontSize: '0.8125rem', color: 'var(--color-secondary-text)', marginTop: '2px' }}>
-                      {t('reports_notice_analytics_sub')}
-                    </p>
+                    
                   </div>
                   <Button
                     variant="outline-primary"

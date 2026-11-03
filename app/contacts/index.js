@@ -10,9 +10,11 @@ import { colors, spacing } from '../../constants';
 import { DEMO_CONTACTS } from '../../data/contacts';
 import { supabase } from '../../lib/supabase';
 import { mockContacts } from '../../data/mockData';
+import { useTranslation } from 'react-i18next';
 
 export default function Contacts() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   const emergencyContacts = DEMO_CONTACTS?.filter(c => c.type === 'emergency') || [];
   const [villageContacts, setVillageContacts] = useState([]);
@@ -118,8 +120,8 @@ export default function Contacts() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <AppText variant="headingMedium">महत्त्वाचे संपर्क</AppText>
-          <AppText variant="bodySmall" style={styles.subtitle}>गावातील महत्त्वाचे संपर्क आणि आपत्कालीन क्रमांक</AppText>
+          <AppText variant="headingMedium">{t('contacts_title')}</AppText>
+          <AppText variant="bodySmall" style={styles.subtitle}>{t('contacts_subtitle')}</AppText>
         </View>
       </View>
 
@@ -128,13 +130,13 @@ export default function Contacts() {
       ) : errorMsg ? (
         <EmptyState title={errorMsg} />
       ) : (emergencyContacts.length === 0 && villageContacts.length === 0) ? (
-        <EmptyState title="सध्या कोणतीही संपर्क माहिती उपलब्ध नाही." />
+        <EmptyState title={t('no_contacts_available')} />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           
           {emergencyContacts.length > 0 && (
             <View style={styles.section}>
-              <AppText variant="headingSmall" style={styles.sectionTitle}>आपत्कालीन संपर्क</AppText>
+              <AppText variant="headingSmall" style={styles.sectionTitle}>{t('emergency_contacts')}</AppText>
               {emergencyContacts.map((contact) => (
                 <ContactCard 
                   key={contact.id}

@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import EmptyState from '../../components/common/EmptyState';
 import ComplaintCard from '../../components/cards/ComplaintCard';
 import AppText from '../../components/ui/AppText';
-import AppButton from '../../components/ui/AppButton';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
 import { mockComplaints, mockComplaintUpdates } from '../../data/mockData';
-import { Ionicons } from '@expo/vector-icons';
+import { cleanComplaintDescription, formatComplaintDateTime, getTrackingId } from '../../lib/complaintUtils';
+import { useTranslation } from 'react-i18next';
 
 const TIMELINE_STAGES = [
   { id: 'received', label: 'तक्रार प्राप्त', triggers: ['प्राप्त', 'प्रक्रियेत', 'सोडवले'] },
@@ -21,6 +22,7 @@ const TIMELINE_STAGES = [
 export default function ComplaintDetails() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { t, i18n } = useTranslation();
 
   const [complaint, setComplaint] = useState(null);
   const [updates, setUpdates] = useState([]);
@@ -127,9 +129,8 @@ export default function ComplaintDetails() {
 
   const currentStatus = complaint.status?.trim() || 'प्राप्त';
   const activeStageIndex = TIMELINE_STAGES.map(s => s.triggers.includes(currentStatus)).lastIndexOf(true);
-  const formattedDate = complaint.created_at 
-    ? new Date(complaint.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) 
-    : (complaint.date || '');
+  const cleanDesc = cleanComplaintDescription(complaint.description);
+  const trackingId = getTrackingId(complaint);
 
   return (
     <ScreenContainer useSafeArea>
@@ -138,52 +139,57 @@ export default function ComplaintDetails() {
           <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <AppText variant="headingMedium">तक्रार तपशील</AppText>
+          <AppText variant="headingMedium">{t('complaint_details_title')}</AppText>
         </View>
 
         <ComplaintCard 
+          item={complaint}
           title={complaint.title}
           id={complaint.id}
           category={complaint.category}
           status={complaint.status}
-          date={formattedDate}
+          createdAt={complaint.created_at}
+          description={complaint.description}
           style={styles.cardOverrides}
         />
 
         <View style={styles.section}>
-          <AppText variant="headingSmall" style={styles.sectionTitle}>तक्रारीची माहिती</AppText>
+          <AppText variant="headingSmall" style={styles.sectionTitle}>{t('complaint_info_section')}</AppText>
           <View style={styles.infoBox}>
             <AppText variant="bodyMedium" style={styles.descriptionText}>
-              {complaint.description || "माहिती उपलब्ध नाही."}
+              {cleanDesc || complaint.description || "माहिती उपलब्ध नाही."}
             </AppText>
           </View>
         </View>
 
         {updates.length > 0 && (
           <View style={styles.section}>
-            <AppText variant="headingSmall" style={styles.sectionTitle}>अपडेट इतिहास</AppText>
-            {updates.map((update) => (
-              <View key={update.id} style={[styles.infoBox, { marginBottom: spacing.sm }]}>
-                {(update.new_status || update.status) && (
-                  <AppText variant="bodyMedium" style={{ fontWeight: 'bold', color: colors.primary, marginBottom: 2 }}>
-                    {update.new_status || update.status}
+            <AppText variant="headingSmall" style={styles.sectionTitle}>{t('update_history_title')}</AppText>
+            {updates.map((update) => {
+              const updateDt = formatComplaintDateTime(update.created_at);
+              return (
+                <View key={update.id} style={[styles.infoBox, { marginBottom: spacing.sm }]}>
+                  {(update.new_status || update.status) && (
+                    <AppText variant="bodyMedium" style={{ fontWeight: 'bold', color: colors.primary, marginBottom: 2 }}>
+                      {update.new_status || update.status}
+                    </AppText>
+                  )}
+                  {(update.update_text || update.description) && (
+                    <AppText variant="bodyMedium" style={styles.descriptionText}>
+                      {update.update_text || update.description}
+                    </AppText>
+                  )}
+                  <AppText variant="bodySmall" style={{ color: colors.secondaryText, marginTop: 4 }}>
+                    {updateDt.display}
                   </AppText>
-                )}
-                {(update.update_text || update.description) && (
-                  <AppText variant="bodyMedium" style={styles.descriptionText}>
-                    {update.update_text || update.description}
-                  </AppText>
-                )}
-                <AppText variant="bodySmall" style={{ color: colors.secondaryText, marginTop: 4 }}>
-                  {new Date(update.created_at).toLocaleString('en-GB')}
-                </AppText>
-              </View>
-            ))}
+                </View>
+              );
+            })}
           </View>
         )}
 
         <View style={styles.section}>
-          <AppText variant="headingSmall" style={styles.sectionTitle}>तक्रार सद्यस्थिती</AppText>
+          <AppText variant="headingSmall" style={styles.sectionTitle}>{t('status_timeline_title')}</AppText>
           
           <View style={styles.timelineContainer}>
             {TIMELINE_STAGES.map((stage, index) => {
@@ -217,7 +223,7 @@ export default function ComplaintDetails() {
                       isActive && styles.labelCurrent
                     ]}
                   >
-                    {stage.label}
+                    {stage.id === 'received' ? t('timeline_received') : stage.id === 'investigation' ? t('timeline_investigation') : stage.id === 'inProgress' ? t('timeline_in_progress') : t('timeline_resolved')}
                   </AppText>
                 </View>
               );
@@ -318,7 +324,7 @@ const styles = StyleSheet.create({
   },
   line: {
     width: 2,
-    height: 30, // Connects to the next node
+    height: 30,
     zIndex: 1,
   },
   lineCompleted: {
@@ -329,7 +335,7 @@ const styles = StyleSheet.create({
   },
   timelineLabel: {
     paddingTop: 2,
-    height: 54, // Matches node + line height roughly to keep rows aligned
+    height: 54,
   },
   labelActive: {
     color: colors.text,

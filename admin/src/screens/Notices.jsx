@@ -165,7 +165,7 @@ export default function Notices() {
             if (citizens && citizens.length > 0) {
               const notifs = citizens.map((c) => ({
                 user_id: c.id,
-                title: 'नवीन सूचना (New Circular)',
+                title: language === 'en' ? 'New Announcement' : 'नवीन सूचना',
                 message: formData.title.trim(),
                 type: 'notice',
                 is_read: false,
@@ -254,21 +254,11 @@ export default function Notices() {
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)' }}>
               {t('notices_title')}
             </h2>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--color-secondary-text)', marginTop: '2px' }}>
-              {t('notices_sub')}
-            </p>
+            
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={fetchNotices}
-              icon={RefreshCw}
-              disabled={loading}
-            >
-              {t('refresh_btn')}
-            </Button>
+            
             <Button
               variant="primary"
               size="sm"

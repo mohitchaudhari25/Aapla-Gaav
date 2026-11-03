@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Search, 
-  RefreshCw, 
   MessageSquare, 
   Eye,
   Send,
@@ -15,18 +14,12 @@ import Modal from '../components/ui/Modal';
 import Alert from '../components/ui/Alert';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-
-const CATEGORY_MAP = {
-  'पाणी': { mr: 'पाणी', en: 'Water' },
-  'रस्ता': { mr: 'रस्ता', en: 'Roads' },
-  'स्वच्छता': { mr: 'स्वच्छता', en: 'Cleanliness' },
-  'आरोग्य': { mr: 'आरोग्य', en: 'Health' },
-  'दिवाबत्ती': { mr: 'दिवाबत्ती', en: 'Streetlights' },
-  'विद्युत/दिवाबत्ती': { mr: 'विद्युत/दिवाबत्ती', en: 'Streetlights' },
-  'गटार': { mr: 'गटार', en: 'Drainage' },
-  'सामान्य': { mr: 'सामान्य', en: 'General' },
-  'इतर': { mr: 'इतर', en: 'Other' },
-};
+import {
+  getTrackingId,
+  parseComplaintCategory,
+  cleanComplaintDescription,
+  formatComplaintDateTime
+} from '../lib/complaintUtils';
 
 export default function Complaints({ initialStatusFilter = 'ALL' }) {
   const { language, t } = useSettings();
@@ -130,100 +123,84 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
     setUpdateErrorMsg(null);
 
     try {
-      // 1. Update the complaint record status in database
-      const { error: updateErr } = await supabase
+      // 1. Update complaints table
+      const { error: updateComplaintErr } = await supabase
         .from('complaints')
         .update({
           status: newStatus,
-          updated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         })
         .eq('id', selectedComplaint.id);
 
-      if (updateErr) throw updateErr;
+      if (updateComplaintErr) throw updateComplaintErr;
 
-      // 2. Insert record into complaint_updates audit trail if remarks provided
-      if (updateRemark.trim()) {
-        const { error: logErr } = await supabase
-          .from('complaint_updates')
-          .insert({
-            complaint_id: selectedComplaint.id,
-            new_status: newStatus,
-            update_text: updateRemark.trim(),
-            created_at: new Date().toISOString(),
-          });
+      // 2. Insert record into complaint_updates audit trail
+      const updateEntry = {
+        complaint_id: selectedComplaint.id,
+        new_status: newStatus,
+        update_text: updateRemark.trim() || `${language === 'en' ? 'Status updated to' : 'स्थिती बदलली'}: ${newStatus}`,
+        created_at: new Date().toISOString()
+      };
 
-        if (logErr) {
-          console.warn('Could not log complaint update message:', logErr);
-        }
+      const { data: newUpdateRecord, error: insertUpdateErr } = await supabase
+        .from('complaint_updates')
+        .insert([updateEntry])
+        .select()
+        .single();
+
+      if (insertUpdateErr) {
+        console.warn('Could not write to complaint_updates log:', insertUpdateErr);
+      } else if (newUpdateRecord) {
+        setComplaintUpdates(prev => [...prev, newUpdateRecord]);
       }
 
-      // 3. Notify the citizen directly in their mobile app
+      // 3. Insert notification for citizen
       if (selectedComplaint.user_id) {
         try {
-          await supabase
-            .from('notifications')
-            .insert({
-              user_id: selectedComplaint.user_id,
-              title: 'तक्रार अपडेट (Grievance Update)',
-              message: `तुमच्या तक्रार "${selectedComplaint.title}" ची स्थिती आता "${newStatus}" झाली आहे.${updateRemark.trim() ? ' शेरा: ' + updateRemark.trim() : ''}`,
-              type: 'complaint',
-              is_read: false,
-              created_at: new Date().toISOString(),
-            });
-        } catch (notifErr) {
-          console.warn('Could not dispatch citizen notification:', notifErr);
+          const notif = {
+            user_id: selectedComplaint.user_id,
+            title: language === 'en' ? 'Complaint Status Updated' : 'तक्रारीची स्थिती अद्यतनित झाली',
+            message: `${language === 'en' ? 'Your complaint status has changed to' : 'तुमच्या तक्रारीची स्थिती बदलली'}: "${newStatus}"${updateRemark ? ' - ' + updateRemark.trim() : ''}`,
+            type: 'status_update',
+            is_read: false,
+            created_at: new Date().toISOString()
+          };
+          await supabase.from('notifications').insert([notif]);
+        } catch (nErr) {
+          console.warn('Failed to send notification to citizen:', nErr);
         }
       }
 
+      // Update local state
+      setSelectedComplaint(prev => ({ ...prev, status: newStatus }));
+      setComplaints(prev => prev.map(c => c.id === selectedComplaint.id ? { ...c, status: newStatus } : c));
       setUpdateSuccessMsg(t('complaints_update_success'));
-
-      // 3. Update local state
-      setSelectedComplaint((prev) => ({ ...prev, status: newStatus }));
-      setComplaints((prev) =>
-        prev.map((c) => (c.id === selectedComplaint.id ? { ...c, status: newStatus } : c))
-      );
       setUpdateRemark('');
-
-      // Refresh updates timeline
-      const { data: newUpdates } = await supabase
-        .from('complaint_updates')
-        .select('*')
-        .eq('complaint_id', selectedComplaint.id)
-        .order('created_at', { ascending: true });
-      if (newUpdates) setComplaintUpdates(newUpdates);
-
     } catch (err) {
-      console.error('Error updating status:', err);
+      console.error('Error updating complaint status:', err);
       setUpdateErrorMsg(err.message || t('complaints_update_error'));
     } finally {
       setIsUpdatingStatus(false);
     }
   };
 
-  // Helper to extract category from description tag e.g. [प्रकार: पाणी]
-  const parseCategory = (desc) => {
-    if (!desc) return language === 'en' ? 'Other' : 'इतर';
-    const match = desc.match(/\[प्रकार:\s*([^\]]+)\]/);
-    const raw = match ? match[1].trim() : 'सामान्य';
-    const mapped = CATEGORY_MAP[raw];
-    if (mapped) return mapped[language] || mapped.mr;
-    return raw;
-  };
-
-  // Filter complaints based on status and search query
-  const filteredComplaints = complaints.filter((comp) => {
-    // Status Filter
+  // Filter and search computation
+  const filteredComplaints = complaints.filter(comp => {
+    // Status filter
     if (activeStatusFilter !== 'ALL') {
-      if (comp.status !== activeStatusFilter) return false;
+      const cStatus = comp.status || 'प्राप्त';
+      if (cStatus !== activeStatusFilter) {
+        return false;
+      }
     }
 
-    // Search Query Filter
+    // Search query matching title, description, or 10-digit tracking ID
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const titleMatch = comp.title?.toLowerCase().includes(q);
-      const descMatch = comp.description?.toLowerCase().includes(q);
-      const idMatch = comp.id?.toLowerCase().includes(q);
-      return titleMatch || descMatch || idMatch;
+      const trackingId = getTrackingId(comp);
+      const title = (comp.title || '').toLowerCase();
+      const desc = (comp.description || '').toLowerCase();
+      return title.includes(q) || desc.includes(q) || trackingId.includes(q);
     }
 
     return true;
@@ -239,27 +216,14 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Top Header Card */}
+      {/* Top Header Card without individual Refresh button and without explanatory subtext */}
       <div className="card" style={{ padding: '1.25rem 1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)' }}>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
               {t('complaints_title')}
             </h2>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--color-secondary-text)', marginTop: '2px' }}>
-              {t('complaints_sub')}
-            </p>
           </div>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={fetchComplaints}
-            icon={RefreshCw}
-            disabled={loading}
-          >
-            {t('refresh_btn')}
-          </Button>
         </div>
 
         {/* Search Bar & Status Tabs */}
@@ -281,12 +245,13 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
             />
           </div>
 
-          {/* Status Tabs */}
+          {/* Status Filter Tabs */}
           <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
             {statusTabs.map((tab) => {
               const isSelected = activeStatusFilter === tab.id;
               return (
                 <button
+                  type="button"
                   key={tab.id}
                   onClick={() => setActiveStatusFilter(tab.id)}
                   style={{
@@ -347,8 +312,8 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
               ? (language === 'en' ? `No complaints found matching "${searchQuery}".` : `'${searchQuery}' साठी एकही तक्रार आढळली नाही.`)
               : t('complaints_empty_desc')
           }
-          actionLabel={searchQuery ? t('clear_filter_btn') : t('refresh_btn')}
-          onAction={searchQuery ? () => setSearchQuery('') : fetchComplaints}
+          actionLabel={searchQuery ? t('clear_filter_btn') : undefined}
+          onAction={searchQuery ? () => setSearchQuery('') : undefined}
         />
       ) : (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -356,33 +321,39 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
             <table className="admin-table">
               <thead>
                 <tr>
-                  <th style={{ width: '120px' }}>{language === 'en' ? 'Complaint ID' : 'तक्रार आयडी'}</th>
+                  <th style={{ width: '140px' }}>{language === 'en' ? 'Tracking ID' : '१० अंकी ट्रॅकिंग आयडी'}</th>
                   <th>{t('complaints_th_title')}</th>
                   <th style={{ width: '130px' }}>{t('complaints_th_category')}</th>
                   <th style={{ width: '130px' }}>{t('complaints_th_status')}</th>
-                  <th style={{ width: '140px' }}>{t('complaints_th_date')}</th>
-                  <th style={{ width: '140px', textAlign: 'center' }}>{t('complaints_th_actions')}</th>
+                  <th style={{ width: '220px' }}>{language === 'en' ? 'Date & Time' : 'दिनांक व वेळ'}</th>
+                  <th style={{ width: '120px', textAlign: 'center' }}>{t('complaints_th_actions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredComplaints.map((comp) => {
-                  const category = parseCategory(comp.description);
+                  const category = parseComplaintCategory(comp.description);
+                  const trackingId = getTrackingId(comp);
+                  const cleanDesc = cleanComplaintDescription(comp.description);
+                  const dateTime = formatComplaintDateTime(comp.created_at, language);
+
                   return (
                     <tr key={comp.id}>
                       <td>
                         <span
                           style={{
                             fontFamily: 'monospace',
-                            fontSize: '0.75rem',
-                            backgroundColor: 'var(--color-background)',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            color: 'var(--color-secondary-text)',
-                            border: '1px solid var(--color-border)',
+                            fontSize: '0.8125rem',
+                            fontWeight: 700,
+                            backgroundColor: 'var(--color-primary-pale)',
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            color: 'var(--color-primary-dark)',
+                            border: '1px solid rgba(46, 125, 50, 0.2)',
+                            letterSpacing: '0.5px',
                           }}
-                          title={comp.id}
+                          title={`Tracking ID: #${trackingId}`}
                         >
-                          {comp.id.substring(0, 8)}...
+                          #{trackingId}
                         </span>
                       </td>
                       <td>
@@ -399,7 +370,7 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          {comp.description || (language === 'en' ? 'No description' : 'वर्णन उपलब्ध नाही')}
+                          {cleanDesc || comp.description || (language === 'en' ? 'No description' : 'वर्णन उपलब्ध नाही')}
                         </div>
                       </td>
                       <td>
@@ -420,11 +391,12 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
                         <Badge status={comp.status || 'प्राप्त'} />
                       </td>
                       <td style={{ fontSize: '0.75rem', color: 'var(--color-secondary-text)', whiteSpace: 'nowrap' }}>
-                        {comp.created_at ? new Date(comp.created_at).toLocaleDateString(language === 'en' ? 'en-IN' : 'mr-IN', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                        }) : 'N/A'}
+                        <div><strong>{dateTime.exact}</strong></div>
+                        {dateTime.relative && (
+                          <div style={{ color: 'var(--color-muted-text)', fontSize: '0.7rem' }}>
+                            {dateTime.relative}
+                          </div>
+                        )}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <Button
@@ -446,202 +418,211 @@ export default function Complaints({ initialStatusFilter = 'ALL' }) {
       )}
 
       {/* Complaint Inspection & Status Update Modal */}
-      {selectedComplaint && (
-        <Modal
-          isOpen={!!selectedComplaint}
-          onClose={() => setSelectedComplaint(null)}
-          title={`${t('complaints_modal_title')}: ${selectedComplaint.title}`}
-          maxWidth="680px"
-          footer={
-            <Button variant="secondary" onClick={() => setSelectedComplaint(null)}>
-              {t('close_btn')}
-            </Button>
-          }
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {updateSuccessMsg && (
-              <Alert type="success" title={language === 'en' ? 'Success' : 'यशस्वी'}>
-                {updateSuccessMsg}
-              </Alert>
-            )}
+      {selectedComplaint && (() => {
+        const modalTrackingId = getTrackingId(selectedComplaint);
+        const modalDateTime = formatComplaintDateTime(selectedComplaint.created_at, language);
+        const modalCleanDesc = cleanComplaintDescription(selectedComplaint.description);
 
-            {updateErrorMsg && (
-              <Alert type="error" title={language === 'en' ? 'Error' : 'त्रुटी'}>
-                {updateErrorMsg}
-              </Alert>
-            )}
+        return (
+          <Modal
+            isOpen={!!selectedComplaint}
+            onClose={() => setSelectedComplaint(null)}
+            title={`${t('complaints_modal_title')}: ${selectedComplaint.title}`}
+            maxWidth="680px"
+            footer={
+              <Button variant="secondary" onClick={() => setSelectedComplaint(null)}>
+                {t('close_btn')}
+              </Button>
+            }
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {updateSuccessMsg && (
+                <Alert type="success" title={language === 'en' ? 'Success' : 'यशस्वी'}>
+                  {updateSuccessMsg}
+                </Alert>
+              )}
 
-            {/* Complaint Summary Grid */}
-            <div
-              style={{
-                backgroundColor: 'var(--color-background)',
-                borderRadius: 'var(--radius-md)',
-                padding: '1rem',
-                border: '1px solid var(--color-border)',
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: '0.75rem',
-                fontSize: '0.8125rem',
-              }}
-            >
-              <div>
-                <span style={{ color: 'var(--color-secondary-text)' }}>{t('complaints_modal_id')}</span>
-                <div style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.75rem', wordBreak: 'break-all' }}>
-                  {selectedComplaint.id}
-                </div>
-              </div>
-              <div>
-                <span style={{ color: 'var(--color-secondary-text)' }}>{language === 'en' ? 'Current Status:' : 'सध्याची स्थिती:'}</span>
-                <div>
-                  <Badge status={selectedComplaint.status || 'प्राप्त'} />
-                </div>
-              </div>
-              <div>
-                <span style={{ color: 'var(--color-secondary-text)' }}>{t('complaints_modal_date')}</span>
-                <div style={{ fontWeight: 600 }}>
-                  {selectedComplaint.created_at ? new Date(selectedComplaint.created_at).toLocaleString(language === 'en' ? 'en-IN' : 'mr-IN') : 'N/A'}
-                </div>
-              </div>
-              <div>
-                <span style={{ color: 'var(--color-secondary-text)' }}>{language === 'en' ? 'Citizen User ID:' : 'नागरिक User ID:'}</span>
-                <div style={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                  {selectedComplaint.user_id ? selectedComplaint.user_id.substring(0, 16) + '...' : (language === 'en' ? 'Anonymous' : 'अज्ञात')}
-                </div>
-              </div>
-            </div>
+              {updateErrorMsg && (
+                <Alert type="error" title={language === 'en' ? 'Error' : 'त्रुटी'}>
+                  {updateErrorMsg}
+                </Alert>
+              )}
 
-            {/* Description Section */}
-            <div>
-              <label className="form-label">{t('complaints_modal_desc')}:</label>
+              {/* Complaint Summary Grid */}
               <div
                 style={{
-                  backgroundColor: 'var(--color-surface)',
-                  border: '1px solid var(--color-border)',
+                  backgroundColor: 'var(--color-background)',
                   borderRadius: 'var(--radius-md)',
-                  padding: '0.875rem',
-                  fontSize: '0.875rem',
-                  lineHeight: 1.6,
-                  whiteSpace: 'pre-wrap',
+                  padding: '1rem',
+                  border: '1px solid var(--color-border)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, 1fr)',
+                  gap: '0.75rem',
+                  fontSize: '0.8125rem',
                 }}
               >
-                {selectedComplaint.description || (language === 'en' ? 'No description provided.' : 'कोणतेही वर्णन दिलेले नाही.')}
+                <div>
+                  <span style={{ color: 'var(--color-secondary-text)', fontSize: '0.75rem' }}>{language === 'en' ? '10-Digit Tracking ID:' : '१० अंकी ट्रॅकिंग आयडी:'}</span>
+                  <div style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: '0.9375rem', color: 'var(--color-primary)' }}>
+                    #{modalTrackingId}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--color-secondary-text)', fontSize: '0.75rem' }}>{language === 'en' ? 'Current Status:' : 'सध्याची स्थिती:'}</span>
+                  <div>
+                    <Badge status={selectedComplaint.status || 'प्राप्त'} />
+                  </div>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--color-secondary-text)', fontSize: '0.75rem' }}>{language === 'en' ? 'Submission Date & Time:' : 'दाखल दिनांक व वेळ:'}</span>
+                  <div style={{ fontWeight: 600 }}>
+                    {modalDateTime.display}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--color-secondary-text)', fontSize: '0.75rem' }}>{language === 'en' ? 'Category:' : 'तक्रार प्रकार:'}</span>
+                  <div style={{ fontWeight: 600 }}>
+                    {parseComplaintCategory(selectedComplaint.description)}
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {/* Timeline / Updates History */}
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
-                <History size={16} color="var(--color-primary)" />
-                <label className="form-label" style={{ marginBottom: 0 }}>
-                  {t('complaints_modal_history_title')}:
-                </label>
-              </div>
-
-              {loadingUpdates ? (
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-secondary-text)' }}>{t('loading')}</div>
-              ) : complaintUpdates.length === 0 ? (
+              {/* Description Section */}
+              <div>
+                <label className="form-label" style={{ fontWeight: 600 }}>{t('complaints_modal_desc')}:</label>
                 <div
                   style={{
-                    padding: '0.75rem',
-                    backgroundColor: 'var(--color-background)',
+                    backgroundColor: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
                     borderRadius: 'var(--radius-md)',
-                    border: '1px dashed var(--color-border)',
-                    fontSize: '0.75rem',
-                    color: 'var(--color-secondary-text)',
+                    padding: '0.875rem',
+                    fontSize: '0.875rem',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
                   }}
                 >
-                  {t('complaints_modal_history_empty')}
+                  {modalCleanDesc || selectedComplaint.description || (language === 'en' ? 'No description provided.' : 'कोणतेही वर्णन दिलेले नाही.')}
                 </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '160px', overflowY: 'auto' }}>
-                  {complaintUpdates.map((up) => (
-                    <div
-                      key={up.id}
-                      style={{
-                        padding: '0.625rem 0.875rem',
-                        borderRadius: 'var(--radius-md)',
-                        backgroundColor: 'var(--color-surface)',
-                        border: '1px solid var(--color-border-light)',
-                        fontSize: '0.8125rem',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <Badge status={up.new_status || up.status} />
-                        <span style={{ fontSize: '0.7rem', color: 'var(--color-muted-text)' }}>
-                          {up.created_at ? new Date(up.created_at).toLocaleString(language === 'en' ? 'en-IN' : 'mr-IN') : ''}
-                        </span>
-                      </div>
-                      <div style={{ color: 'var(--color-text)' }}>{up.update_text || up.description}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+              </div>
 
-            {/* Action Form: Update Status */}
-            <form
-              onSubmit={handleUpdateStatus}
-              style={{
-                marginTop: '0.5rem',
-                padding: '1rem',
-                backgroundColor: 'var(--color-background)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--color-border)',
-              }}
-            >
-              <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '0.75rem' }}>
-                {t('complaints_modal_update_title')}
-              </h4>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.875rem', marginBottom: '0.75rem' }}>
-                <div>
-                  <label className="form-label" htmlFor="new-status-select" style={{ fontSize: '0.8125rem' }}>
-                    {t('complaints_modal_select_status')}
+              {/* Timeline / Updates History */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
+                  <History size={16} color="var(--color-primary)" />
+                  <label className="form-label" style={{ marginBottom: 0, fontWeight: 600 }}>
+                    {t('complaints_modal_history_title')}:
                   </label>
-                  <select
-                    id="new-status-select"
-                    className="form-select"
-                    value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value)}
-                    disabled={isUpdatingStatus}
-                  >
-                    <option value="प्राप्त">{t('status_received')}</option>
-                    <option value="प्रक्रियेत">{t('status_in_progress')}</option>
-                    <option value="सोडवले">{t('status_resolved')}</option>
-                    <option value="नाकारले">{t('status_rejected')}</option>
-                  </select>
                 </div>
+
+                {loadingUpdates ? (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-secondary-text)' }}>{t('loading')}</div>
+                ) : complaintUpdates.length === 0 ? (
+                  <div
+                    style={{
+                      padding: '0.75rem',
+                      backgroundColor: 'var(--color-background)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px dashed var(--color-border)',
+                      fontSize: '0.75rem',
+                      color: 'var(--color-secondary-text)',
+                    }}
+                  >
+                    {t('complaints_modal_history_empty')}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '160px', overflowY: 'auto' }}>
+                    {complaintUpdates.map((up) => {
+                      const upDt = formatComplaintDateTime(up.created_at, language);
+                      return (
+                        <div
+                          key={up.id}
+                          style={{
+                            padding: '0.625rem 0.875rem',
+                            borderRadius: 'var(--radius-md)',
+                            backgroundColor: 'var(--color-surface)',
+                            border: '1px solid var(--color-border-light)',
+                            fontSize: '0.8125rem',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <Badge status={up.new_status || up.status} />
+                            <span style={{ fontSize: '0.7rem', color: 'var(--color-muted-text)' }}>
+                              {upDt.display}
+                            </span>
+                          </div>
+                          <div style={{ color: 'var(--color-text)' }}>{up.update_text || up.description}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
-              <div className="form-group" style={{ marginBottom: '0.875rem' }}>
-                <label className="form-label" htmlFor="update-remark-input" style={{ fontSize: '0.8125rem' }}>
-                  {t('complaints_modal_notes')}
-                </label>
-                <textarea
-                  id="update-remark-input"
-                  className="form-textarea"
-                  rows={2}
-                  placeholder={t('complaints_modal_notes_placeholder')}
-                  value={updateRemark}
-                  onChange={(e) => setUpdateRemark(e.target.value)}
-                  disabled={isUpdatingStatus}
-                />
-              </div>
+              {/* Action Form: Update Status */}
+              <form
+                onSubmit={handleUpdateStatus}
+                style={{
+                  marginTop: '0.5rem',
+                  padding: '1rem',
+                  backgroundColor: 'var(--color-background)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)',
+                }}
+              >
+                <h4 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '0.75rem' }}>
+                  {t('complaints_modal_update_title')}
+                </h4>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  isLoading={isUpdatingStatus}
-                  icon={Send}
-                >
-                  {isUpdatingStatus ? t('saving_btn') : (language === 'en' ? 'Save Status Update' : 'स्थिती अद्यतनित करा')}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </Modal>
-      )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.875rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label className="form-label" htmlFor="new-status-select" style={{ fontSize: '0.8125rem' }}>
+                      {t('complaints_modal_select_status')}
+                    </label>
+                    <select
+                      id="new-status-select"
+                      className="form-select"
+                      value={newStatus}
+                      onChange={(e) => setNewStatus(e.target.value)}
+                      disabled={isUpdatingStatus}
+                    >
+                      <option value="प्राप्त">{t('status_received')}</option>
+                      <option value="प्रक्रियेत">{t('status_in_progress')}</option>
+                      <option value="सोडवले">{t('status_resolved')}</option>
+                      <option value="नाकारले">{t('status_rejected')}</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '0.875rem' }}>
+                  <label className="form-label" htmlFor="update-remark-input" style={{ fontSize: '0.8125rem' }}>
+                    {t('complaints_modal_notes')}
+                  </label>
+                  <textarea
+                    id="update-remark-input"
+                    className="form-textarea"
+                    rows={2}
+                    placeholder={t('complaints_modal_notes_placeholder')}
+                    value={updateRemark}
+                    onChange={(e) => setUpdateRemark(e.target.value)}
+                    disabled={isUpdatingStatus}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    isLoading={isUpdatingStatus}
+                    icon={Send}
+                  >
+                    {isUpdatingStatus ? t('saving_btn') : (language === 'en' ? 'Save Status Update' : 'स्थिती अद्यतनित करा')}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

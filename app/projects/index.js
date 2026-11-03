@@ -8,9 +8,11 @@ import ProjectCard from '../../components/cards/ProjectCard';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 
 export default function Projects() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -83,8 +85,8 @@ export default function Projects() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <AppText variant="headingMedium">विकास कामे</AppText>
-          <AppText variant="bodySmall" style={styles.subtitle}>गावात सुरू असलेल्या आणि पूर्ण झालेल्या विकास कामांची माहिती</AppText>
+          <AppText variant="headingMedium">{t('projects_title')}</AppText>
+          <AppText variant="bodySmall" style={styles.subtitle}>{t('projects_subtitle')}</AppText>
         </View>
       </View>
 
@@ -92,17 +94,17 @@ export default function Projects() {
         <View style={styles.summaryContainer}>
           <View style={styles.summaryItem}>
             <AppText variant="headingSmall" style={styles.summaryValue}>{totalProjects}</AppText>
-            <AppText variant="label" style={styles.summaryLabel}>एकूण कामे</AppText>
+            <AppText variant="label" style={styles.summaryLabel}>{t('total_projects')}</AppText>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <AppText variant="headingSmall" style={[styles.summaryValue, { color: colors.info }]}>{ongoingProjects}</AppText>
-            <AppText variant="label" style={styles.summaryLabel}>चालू</AppText>
+            <AppText variant="label" style={styles.summaryLabel}>{t('ongoing_projects')}</AppText>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <AppText variant="headingSmall" style={[styles.summaryValue, { color: colors.primary }]}>{completedProjects}</AppText>
-            <AppText variant="label" style={styles.summaryLabel}>पूर्ण</AppText>
+            <AppText variant="label" style={styles.summaryLabel}>{t('completed_projects')}</AppText>
           </View>
         </View>
       )}
@@ -113,7 +115,7 @@ export default function Projects() {
         <EmptyState title={errorMsg} />
       ) : totalProjects === 0 ? (
         <EmptyState 
-          title="सध्या कोणतीही विकास कामे उपलब्ध नाहीत." 
+          title={t('no_projects_available')} 
         />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

@@ -10,6 +10,7 @@ import Projects from './screens/Projects';
 import VillageInfo from './screens/VillageInfo';
 import Citizens from './screens/Citizens';
 import Reports from './screens/Reports';
+import Schemes from './screens/Schemes';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 
 function AppContent() {
@@ -88,6 +89,8 @@ function AppContent() {
         <Projects />
       ) : activeTab === 'citizens' ? (
         <Citizens />
+      ) : activeTab === 'schemes' ? (
+        <Schemes />
       ) : (
         <Reports />
       )}

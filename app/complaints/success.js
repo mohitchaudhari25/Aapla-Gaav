@@ -6,10 +6,15 @@ import AppText from '../../components/ui/AppText';
 import AppButton from '../../components/ui/AppButton';
 import { colors, spacing, radius } from '../../constants';
 import { Ionicons } from '@expo/vector-icons';
+import { getTrackingId } from '../../lib/complaintUtils';
+import { useTranslation } from 'react-i18next';
 
 export default function ComplaintSuccess() {
-  const { id } = useLocalSearchParams();
+  const { id, trackingId } = useLocalSearchParams();
   const router = useRouter();
+  const { t } = useTranslation();
+
+  const displayId = trackingId || getTrackingId({ id });
 
   return (
     <ScreenContainer useSafeArea style={styles.container}>
@@ -18,32 +23,34 @@ export default function ComplaintSuccess() {
           <Ionicons name="checkmark-circle" size={80} color={colors.primary} />
         </View>
         
-        <AppText variant="headingLarge" style={styles.title}>तक्रार यशस्वीरित्या नोंदवली!</AppText>
+        <AppText variant="headingLarge" style={styles.title}>{t('complaint_success_title')}</AppText>
         <AppText variant="bodyMedium" style={styles.subtitle}>
-          तुमची तक्रार ग्रामपंचायतीकडे नोंदवण्यात आली आहे.
+          {t('complaint_success_desc')}
         </AppText>
         
         <View style={styles.infoCard}>
-          <AppText variant="label" style={styles.label}>तक्रार क्रमांक</AppText>
-          <AppText variant="headingMedium" style={styles.idText}>
-            {id || 'तक्रार क्रमांक उपलब्ध नाही'}
-          </AppText>
+          <AppText variant="label" style={styles.label}>{t('tracking_id_banner_label')}</AppText>
+          <View style={styles.badgeWrapper}>
+            <AppText variant="headingLarge" style={styles.idText}>
+              #{displayId}
+            </AppText>
+          </View>
           <View style={styles.statusBadge}>
-            <AppText variant="label" style={styles.statusText}>स्थिती: प्राप्त</AppText>
+            <AppText variant="label" style={styles.statusText}>{t('status_submitted_label')}</AppText>
           </View>
         </View>
       </View>
 
       <View style={styles.actions}>
         <AppButton 
-          title="माझ्या तक्रारी पहा" 
+          title={t('myComplaints')} 
           onPress={() => router.replace('/(tabs)/complaints')} 
           style={styles.buttonSpacing}
         />
         
         {id && (
           <AppButton 
-            title="तक्रारीचा तपशील पहा" 
+            title={t('complaint_details_title')} 
             onPress={() => router.replace({ pathname: '/complaints/details', params: { id } })}
             variant="outline"
             style={styles.buttonSpacing}
@@ -51,7 +58,7 @@ export default function ComplaintSuccess() {
         )}
         
         <AppButton 
-          title="मुख्यपृष्ठावर जा" 
+          title={t('tab_home')} 
           onPress={() => router.replace('/(tabs)')} 
           variant="outline"
         />
@@ -96,22 +103,33 @@ const styles = StyleSheet.create({
   label: {
     color: colors.secondaryText,
     marginBottom: spacing.xs,
+    fontSize: 13,
+  },
+  badgeWrapper: {
+    backgroundColor: colors.primaryPale,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    marginVertical: spacing.sm,
   },
   idText: {
-    color: colors.text,
-    marginBottom: spacing.md,
+    color: colors.primaryDark || colors.primary,
+    letterSpacing: 1.5,
+    fontWeight: '800',
   },
   statusBadge: {
-    backgroundColor: colors.info,
+    backgroundColor: colors.infoPale || '#e1f5fe',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radius.round,
+    marginTop: spacing.xs,
   },
   statusText: {
-    color: colors.white,
+    color: colors.info,
+    fontWeight: '600',
   },
   actions: {
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.lg,
   },
   buttonSpacing: {
     marginBottom: spacing.md,

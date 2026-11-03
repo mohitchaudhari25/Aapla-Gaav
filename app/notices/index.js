@@ -9,9 +9,11 @@ import EmptyState from '../../components/common/EmptyState';
 import AppButton from '../../components/ui/AppButton';
 import { colors, spacing } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 
 export default function Notices() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -78,8 +80,8 @@ export default function Notices() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <AppText variant="headingMedium">गावातील सूचना</AppText>
-          <AppText variant="bodySmall" style={styles.subtitle}>गावातील महत्त्वाच्या सूचना आणि घोषणा</AppText>
+          <AppText variant="headingMedium">{t('notices_title')}</AppText>
+          <AppText variant="bodySmall" style={styles.subtitle}>{t('notices_subtitle')}</AppText>
         </View>
       </View>
 
@@ -90,11 +92,11 @@ export default function Notices() {
       ) : error ? (
         <View style={styles.centerContainer}>
           <AppText style={styles.errorText}>{error}</AppText>
-          <AppButton title="पुन्हा प्रयत्न करा" onPress={fetchNotices} />
+          <AppButton title={t('retry')} onPress={fetchNotices} />
         </View>
       ) : (!notices || notices.length === 0) ? (
         <EmptyState 
-          title="सध्या कोणतीही सूचना उपलब्ध नाही." 
+          title={t('no_notices_available')} 
         />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

@@ -181,7 +181,7 @@ export default function Projects() {
           if (citizens && citizens.length > 0) {
             const notifs = citizens.map((c) => ({
               user_id: c.id,
-              title: 'नवीन विकास काम (New Development Work)',
+              title: language === 'en' ? 'New Development Project' : 'नवीन विकास काम',
               message: `गावात नवीन विकास काम सुरू: "${formData.name.trim()}"`,
               type: 'project',
               is_read: false,
@@ -252,21 +252,11 @@ export default function Projects() {
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text)' }}>
               {t('projects_title')}
             </h2>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--color-secondary-text)', marginTop: '2px' }}>
-              {t('projects_sub')}
-            </p>
+            
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={fetchProjects}
-              icon={RefreshCw}
-              disabled={loading}
-            >
-              {t('refresh_btn')}
-            </Button>
+            
             <Button
               variant="primary"
               size="sm"

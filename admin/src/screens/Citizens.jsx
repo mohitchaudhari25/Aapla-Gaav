@@ -252,22 +252,13 @@ export default function Citizens() {
                   <Badge variant="success" label={`${t('total')}: ${citizens.length}`} />
                 )}
               </div>
-              <p style={{ fontSize: '0.875rem', color: 'var(--color-secondary-text)', marginTop: '2px' }}>
-                {t('citizens_sub')}
-              </p>
+              
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Button
-            variant="secondary"
-            icon={RefreshCw}
-            onClick={fetchCitizensData}
-            disabled={loading}
-          >
-            {t('refresh_btn')}
-          </Button>
+          
         </div>
       </div>
 

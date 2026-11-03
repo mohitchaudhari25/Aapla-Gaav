@@ -22,8 +22,9 @@ export function SettingsProvider({ children }) {
     }
   });
 
-  // Global Settings Modal state
+  // Global Settings Modal state & active tab
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsActiveTab, setSettingsActiveTab] = useState('profile');
 
   // Apply theme to document
   useEffect(() => {
@@ -66,7 +67,13 @@ export function SettingsProvider({ children }) {
     }
   }, []);
 
-  const openSettings = useCallback(() => setIsSettingsOpen(true), []);
+  const openSettings = useCallback((initialTab = 'profile') => {
+    if (initialTab) {
+      setSettingsActiveTab(initialTab);
+    }
+    setIsSettingsOpen(true);
+  }, []);
+
   const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
 
   // Translation helper: returns single language string based on active language
@@ -94,10 +101,12 @@ export function SettingsProvider({ children }) {
       setLanguage,
       t,
       isSettingsOpen,
+      settingsActiveTab,
+      setSettingsActiveTab,
       openSettings,
       closeSettings,
     }),
-    [theme, setTheme, toggleTheme, language, setLanguage, t, isSettingsOpen, openSettings, closeSettings]
+    [theme, setTheme, toggleTheme, language, setLanguage, t, isSettingsOpen, settingsActiveTab, setSettingsActiveTab, openSettings, closeSettings]
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
@@ -120,6 +129,8 @@ export function useSettings() {
       setLanguage: () => {},
       t: tFallback,
       isSettingsOpen: false,
+      settingsActiveTab: 'profile',
+      setSettingsActiveTab: () => {},
       openSettings: () => {},
       closeSettings: () => {},
     };

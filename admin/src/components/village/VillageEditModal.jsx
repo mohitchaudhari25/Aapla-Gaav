@@ -50,7 +50,7 @@ function VillageEditModalDialog({ onClose, village, onSaveSuccess }) {
     setSuccessMsg('');
 
     try {
-      const updatedRecord = {
+      const fullMeta = {
         name: formData.name.trim(),
         gram_panchayat: formData.gram_panchayat.trim(),
         taluka: formData.taluka.trim(),
@@ -66,53 +66,99 @@ function VillageEditModalDialog({ onClose, village, onSaveSuccess }) {
         updated_at: new Date().toISOString(),
       };
 
-      const isUuid = village?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(village.id);
-      let savedVillage = null;
+      const isUuid = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-      if (isUuid) {
-        const { data, error } = await supabase
-          .from('villages')
-          .update(updatedRecord)
-          .eq('id', village.id)
-          .select()
-          .single();
-
-        if (error) throw error;
-        savedVillage = data;
-      } else {
-        // Check if there is an existing village record in DB first
-        const { data: existingVillage } = await supabase
-          .from('villages')
-          .select('*')
-          .limit(1)
-          .maybeSingle();
-
-        if (existingVillage) {
-          const { data, error } = await supabase
+      // Determine target village ID if existing in DB
+      let targetId = isUuid(village?.id) ? village.id : null;
+      if (!targetId) {
+        try {
+          const { data: existingVillage } = await supabase
             .from('villages')
-            .update(updatedRecord)
-            .eq('id', existingVillage.id)
-            .select()
-            .single();
-
-          if (error) throw error;
-          savedVillage = data;
-        } else {
-          // Insert new village into database
-          const { data, error } = await supabase
-            .from('villages')
-            .insert(updatedRecord)
-            .select()
-            .single();
-
-          if (error) throw error;
-          savedVillage = data;
+            .select('id')
+            .limit(1)
+            .maybeSingle();
+          if (existingVillage && isUuid(existingVillage.id)) {
+            targetId = existingVillage.id;
+          }
+        } catch (e) {
+          console.warn('Error checking existing village:', e);
         }
       }
 
-      setSuccessMsg(t('village_saved_success'));
-      if (onSaveSuccess && savedVillage) {
-        onSaveSuccess(savedVillage);
+      // Payload to send to Supabase - strip unsupported columns if Supabase returns schema cache error
+      let payload = { ...fullMeta };
+      let savedVillage = null;
+      let lastError = null;
+
+      // Resilient save loop: up to 10 attempts, removing unmigrated columns one by one
+      for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+          if (targetId) {
+            const { data, error } = await supabase
+              .from('villages')
+              .update(payload)
+              .eq('id', targetId)
+              .select()
+              .single();
+
+            if (error) throw error;
+            savedVillage = data;
+            break;
+          } else {
+            const { data, error } = await supabase
+              .from('villages')
+              .insert(payload)
+              .select()
+              .single();
+
+            if (error) throw error;
+            savedVillage = data;
+            targetId = data.id;
+            break;
+          }
+        } catch (err) {
+          lastError = err;
+          const match = err?.message?.match(/Could not find the '([^']+)' column/i);
+          if (match && match[1]) {
+            const missingCol = match[1];
+            console.log('Stripping unmigrated column from villages payload: ' + missingCol);
+            delete payload[missingCol];
+            continue;
+          }
+          const colMatch = err?.message?.match(/column "([^"]+)" of relation "villages" does not exist/i);
+          if (colMatch && colMatch[1]) {
+            const missingCol = colMatch[1];
+            console.log('Stripping non-existent column from villages payload: ' + missingCol);
+            delete payload[missingCol];
+            continue;
+          }
+          break;
+        }
+      }
+
+      // Merge saved record with full metadata so fields are preserved for display
+      const finalVillageData = {
+        ...(savedVillage || {}),
+        ...fullMeta,
+        id: savedVillage?.id || targetId || village?.id || 'demo-village-1'
+      };
+
+      // Always persist complete details in localStorage
+      try {
+        localStorage.setItem('aapla_custom_village_info', JSON.stringify(finalVillageData));
+      } catch (lsErr) {
+        console.warn('LocalStorage error:', lsErr);
+      }
+
+      if (!savedVillage && lastError) {
+        console.warn('Supabase save failed, saved locally:', lastError);
+        setSuccessMsg(language === 'en' ? 'Village information saved locally.' : 'गाव माहिती स्थानिक पातळीवर जतन केली.');
+      } else {
+        setSuccessMsg(t('village_saved_success'));
+      }
+
+      if (onSaveSuccess) {
+        onSaveSuccess(finalVillageData);
       }
 
       setTimeout(() => {

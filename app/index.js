@@ -9,21 +9,34 @@ export default function SplashScreen() {
   const router = useRouter();
 
   useEffect(() => {
+    let mounted = true;
+    let timer = null;
+
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      const timer = setTimeout(() => {
-        if (session) {
+      let hasSession = false;
+      try {
+        const { data } = await supabase.auth.getSession();
+        hasSession = !!data?.session;
+      } catch (e) {
+        console.warn('Session check error:', e);
+      }
+
+      timer = setTimeout(() => {
+        if (!mounted) return;
+        if (hasSession) {
           router.replace('/(tabs)');
         } else {
           router.replace('/onboarding/language');
         }
-      }, 2000);
-      
-      return () => clearTimeout(timer);
+      }, 1500);
     };
-    
+
     checkSession();
+
+    return () => {
+      mounted = false;
+      if (timer) clearTimeout(timer);
+    };
   }, [router]);
 
   return (
@@ -46,6 +59,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    minHeight: '100%',
   },
   content: {
     alignItems: 'center',
@@ -58,5 +72,5 @@ const styles = StyleSheet.create({
   tagline: {
     color: colors.primaryPale,
     textAlign: 'center',
-  }
+  },
 });

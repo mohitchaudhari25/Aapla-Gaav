@@ -19,7 +19,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 
 export default function Header({ onOpenMobile }) {
-  const { user, role, backendOnline, checkHealth, logout } = useAuth();
+  const { user, role, adminProfile, backendOnline, checkHealth, logout } = useAuth();
   const { theme, toggleTheme, language, setLanguage, t, openSettings } = useSettings();
 
   const [isChecking, setIsChecking] = useState(false);
@@ -52,9 +52,11 @@ export default function Header({ onOpenMobile }) {
     setTimeout(() => setIsChecking(false), 500);
   };
 
-  const displayName = user?.user_metadata?.full_name || user?.name || 'Hizrian';
+  const displayName = adminProfile?.full_name || user?.user_metadata?.full_name || user?.name || 'Mohit Chaudhari';
+  const displayAvatar = adminProfile?.avatar_url || user?.user_metadata?.avatar_url || '/profile.jpg';
   const displayRole = role === 'super_admin' ? t('role_super_administrator') : t('role_administrator');
-  const displayEmail = user?.email || 'admin@aaplagaav.in';
+  const displayEmail = adminProfile?.email || user?.email || 'admin@aaplagaav.in';
+  const displayDesignation = adminProfile?.designation || user?.user_metadata?.designation || 'प्रशासक';
 
   // Notifications in single language
   const notifications = [
@@ -468,6 +470,56 @@ export default function Header({ onOpenMobile }) {
           )}
         </div>
 
+        {/* Prominent Language Switcher (मराठी | English) */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            backgroundColor: 'var(--color-surface)',
+            border: '1.5px solid var(--color-border)',
+            borderRadius: 'var(--radius-full)',
+            padding: '2px',
+            gap: '2px',
+            boxShadow: 'var(--shadow-xs)'
+          }}
+          title={language === 'en' ? 'Switch Language' : 'भाषा बदला'}
+        >
+          <button
+            onClick={() => setLanguage('mr')}
+            style={{
+              padding: '4px 11px',
+              border: 'none',
+              borderRadius: 'var(--radius-full)',
+              backgroundColor: language === 'mr' ? 'var(--color-primary)' : 'transparent',
+              color: language === 'mr' ? '#FFFFFF' : 'var(--color-secondary-text)',
+              fontSize: '0.78125rem',
+              fontWeight: language === 'mr' ? 700 : 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              lineHeight: 1.2
+            }}
+          >
+            मराठी
+          </button>
+          <button
+            onClick={() => setLanguage('en')}
+            style={{
+              padding: '4px 11px',
+              border: 'none',
+              borderRadius: 'var(--radius-full)',
+              backgroundColor: language === 'en' ? 'var(--color-primary)' : 'transparent',
+              color: language === 'en' ? '#FFFFFF' : 'var(--color-secondary-text)',
+              fontSize: '0.78125rem',
+              fontWeight: language === 'en' ? 700 : 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              lineHeight: 1.2
+            }}
+          >
+            English
+          </button>
+        </div>
+
         {/* User Profile Trigger */}
         <div style={{ position: 'relative' }}>
           <button
@@ -507,7 +559,7 @@ export default function Header({ onOpenMobile }) {
             >
               {!avatarError ? (
                 <img
-                  src="/profile.jpg"
+                  src={displayAvatar}
                   alt={displayName}
                   onError={() => setAvatarError(true)}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -586,7 +638,7 @@ export default function Header({ onOpenMobile }) {
                 >
                   {!avatarError ? (
                     <img
-                      src="/profile.jpg"
+                      src={displayAvatar}
                       alt={displayName}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
@@ -617,19 +669,36 @@ export default function Header({ onOpenMobile }) {
                   >
                     {displayEmail}
                   </div>
-                  <div
-                    style={{
-                      display: 'inline-block',
-                      marginTop: '4px',
-                      fontSize: '0.675rem',
-                      fontWeight: 700,
-                      backgroundColor: 'var(--color-primary-pale)',
-                      color: 'var(--color-primary)',
-                      padding: '2px 8px',
-                      borderRadius: '9999px',
-                    }}
-                  >
-                    {displayRole}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
+                    <span
+                      style={{
+                        display: 'inline-block',
+                        fontSize: '0.675rem',
+                        fontWeight: 700,
+                        backgroundColor: 'var(--color-primary-pale)',
+                        color: 'var(--color-primary)',
+                        padding: '2px 8px',
+                        borderRadius: '9999px',
+                      }}
+                    >
+                      {displayRole}
+                    </span>
+                    {displayDesignation && (
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          fontSize: '0.675rem',
+                          fontWeight: 600,
+                          backgroundColor: 'var(--color-surface)',
+                          color: 'var(--color-secondary-text)',
+                          border: '1px solid var(--color-border)',
+                          padding: '2px 8px',
+                          borderRadius: '9999px',
+                        }}
+                      >
+                        {displayDesignation}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -723,60 +792,12 @@ export default function Header({ onOpenMobile }) {
                 </div>
               </div>
 
-              {/* Backend API Connection Status Strip */}
-              <div
-                style={{
-                  padding: '0.625rem 1rem',
-                  backgroundColor: 'var(--color-surface)',
-                  borderBottom: '1px solid var(--color-border)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontSize: '0.75rem',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Activity
-                    size={13}
-                    color={backendOnline ? '#16A34A' : '#DC2626'}
-                    className={backendOnline ? 'animate-pulse' : ''}
-                  />
-                  <span style={{ color: 'var(--color-secondary-text)', fontWeight: 500 }}>
-                    {t('backend_api')}:
-                  </span>
-                  <span
-                    style={{
-                      fontWeight: 700,
-                      color: backendOnline ? '#16A34A' : '#DC2626',
-                    }}
-                  >
-                    {backendOnline ? t('online') : t('offline')}
-                  </span>
-                </div>
-                <button
-                  onClick={handleRefreshHealth}
-                  disabled={isChecking}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--color-secondary-text)',
-                    padding: '2px',
-                    display: 'flex',
-                    alignItems: 'center',
-                  }}
-                  title={t('check_connection')}
-                >
-                  <RefreshCw size={12} className={isChecking ? 'spinner' : ''} />
-                </button>
-              </div>
-
               {/* Action Links */}
               <div style={{ padding: '0.5rem 0' }}>
                 <button
                   onClick={() => {
                     setIsProfileOpen(false);
-                    openSettings();
+                    openSettings('profile');
                   }}
                   style={{
                     width: '100%',
@@ -802,7 +823,7 @@ export default function Header({ onOpenMobile }) {
                 <button
                   onClick={() => {
                     setIsProfileOpen(false);
-                    openSettings();
+                    openSettings('appearance');
                   }}
                   style={{
                     width: '100%',

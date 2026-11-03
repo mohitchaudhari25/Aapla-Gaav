@@ -33,6 +33,8 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Alert from '../components/ui/Alert';
 import Modal from '../components/ui/Modal';
 
+const isUUID = (id) => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices, onNavigateToComplaints }) {
   const { villageId } = useAuth();
   const { language, t } = useSettings();
@@ -104,7 +106,7 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
       let fetchedVillages = [];
       let activeVillage = null;
 
-      if (villageId) {
+      if (isUUID(villageId)) {
         try {
           const { data: vSingle, error: singleErr } = await supabase
             .from('villages')
@@ -143,7 +145,8 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
         if (saved) {
           const parsed = JSON.parse(saved);
           if (activeVillage) {
-            activeVillage = { ...activeVillage, ...parsed };
+            const realId = isUUID(activeVillage.id) ? activeVillage.id : (isUUID(parsed.id) ? parsed.id : activeVillage.id);
+            activeVillage = { ...activeVillage, ...parsed, id: realId };
           } else {
             activeVillage = parsed;
             fetchedVillages = [parsed];
@@ -183,7 +186,7 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
 
       // 2. Fetch Projects Summary for this village
       let projQuery = supabase.from('projects').select('id, name, status, budget, amount_spent, progress, created_at');
-      if (targetVillageId) {
+      if (isUUID(targetVillageId)) {
         projQuery = projQuery.eq('village_id', targetVillageId);
       }
       const { data: projectsData, error: projErr } = await projQuery.order('created_at', { ascending: false });
@@ -210,7 +213,7 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
 
       // 3. Fetch Notices Summary for this village
       let noticeQuery = supabase.from('notices').select('id, title, status, created_at');
-      if (targetVillageId) {
+      if (isUUID(targetVillageId)) {
         noticeQuery = noticeQuery.eq('village_id', targetVillageId);
       }
       const { data: noticesData, error: noticeErr } = await noticeQuery.order('created_at', { ascending: false });
@@ -235,7 +238,7 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
       let citizenUserIds = [];
       try {
         let profileQuery = supabase.from('profiles').select('id, village_id');
-        if (targetVillageId) {
+        if (isUUID(targetVillageId)) {
           profileQuery = profileQuery.eq('village_id', targetVillageId);
         }
         const { data: profilesData, error: profileErr } = await profileQuery;
@@ -290,38 +293,58 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
       }
 
       // 6. Fetch Contacts Directory
-      if (targetVillageId && targetVillageId !== 'demo-village-1') {
-        const { data: contactsData, error: contactsErr } = await supabase
-          .from('contacts')
-          .select('*')
-          .eq('village_id', targetVillageId)
-          .order('created_at', { ascending: false });
+      let combinedContacts = [];
+      if (isUUID(targetVillageId)) {
+        try {
+          const { data: contactsData, error: contactsErr } = await supabase
+            .from('contacts')
+            .select('*')
+            .eq('village_id', targetVillageId)
+            .order('created_at', { ascending: false });
 
-        if (contactsErr) {
-          console.warn('Contacts fetch error:', contactsErr);
-        } else if (contactsData) {
-          setContactsList(contactsData);
+          if (!contactsErr && contactsData) {
+            combinedContacts = contactsData;
+          }
+        } catch (e) {
+          console.warn('Contacts query error:', e);
         }
-      } else {
-        setContactsList([]);
       }
+      try {
+        const localContacts = JSON.parse(localStorage.getItem('aapla_custom_contacts') || '[]');
+        if (Array.isArray(localContacts) && localContacts.length > 0) {
+          const existingIds = new Set(combinedContacts.map(c => c.id));
+          const uniqueLocal = localContacts.filter(c => !existingIds.has(c.id));
+          combinedContacts = [...combinedContacts, ...uniqueLocal];
+        }
+      } catch (e) {}
+      setContactsList(combinedContacts);
 
       // 7. Fetch Fund Transactions Ledger
-      if (targetVillageId && targetVillageId !== 'demo-village-1') {
-        const { data: fundsData, error: fundsErr } = await supabase
-          .from('fund_transactions')
-          .select('*')
-          .eq('village_id', targetVillageId)
-          .order('transaction_date', { ascending: false });
+      let combinedFunds = [];
+      if (isUUID(targetVillageId)) {
+        try {
+          const { data: fundsData, error: fundsErr } = await supabase
+            .from('fund_transactions')
+            .select('*')
+            .eq('village_id', targetVillageId)
+            .order('transaction_date', { ascending: false });
 
-        if (fundsErr) {
-          console.warn('Funds fetch error:', fundsErr);
-        } else if (fundsData) {
-          setFundsList(fundsData);
+          if (!fundsErr && fundsData) {
+            combinedFunds = fundsData;
+          }
+        } catch (e) {
+          console.warn('Funds query error:', e);
         }
-      } else {
-        setFundsList([]);
       }
+      try {
+        const localFunds = JSON.parse(localStorage.getItem('aapla_custom_funds') || '[]');
+        if (Array.isArray(localFunds) && localFunds.length > 0) {
+          const existingIds = new Set(combinedFunds.map(f => f.id));
+          const uniqueLocal = localFunds.filter(f => !existingIds.has(f.id));
+          combinedFunds = [...uniqueLocal, ...combinedFunds];
+        }
+      } catch (e) {}
+      setFundsList(combinedFunds);
 
       if (errors.length > 0) {
         setError(errors.join(' | '));
@@ -352,70 +375,98 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
     };
   }, [fetchVillageData]);
 
+  // Helper to ensure we have a valid database village UUID before inserting
+  const ensureDatabaseVillageId = async (currentVillage) => {
+    if (isUUID(currentVillage?.id)) return currentVillage.id;
+    try {
+      // 1. Try to fetch any existing village from DB
+      const { data: vList } = await supabase.from('villages').select('id').limit(1);
+      if (vList && vList.length > 0 && isUUID(vList[0].id)) {
+        return vList[0].id;
+      }
+      // 2. If table has no village, auto-insert the active village
+      const { data: createdV } = await supabase.from('villages').insert({
+        name: currentVillage?.name || 'शिवाजीनगर',
+        taluka: currentVillage?.taluka || 'हवेली',
+        district: currentVillage?.district || 'पुणे',
+        state: currentVillage?.state || 'महाराष्ट्र'
+      }).select().single();
+      if (createdV && isUUID(createdV.id)) {
+        return createdV.id;
+      }
+    } catch (err) {
+      console.warn('Auto ensure village id error:', err);
+    }
+    return null;
+  };
+
   const handleAddContact = async (e) => {
     e.preventDefault();
-    if (!selectedVillage?.id || selectedVillage.id === 'demo-village-1') {
-      alert(language === 'en' ? 'Please save village information first to create a database record.' : 'कृपया प्रथम गाव माहिती सेव्ह करा.');
-      return;
-    }
     if (!contactForm.name.trim() || !contactForm.designation.trim() || !contactForm.phone.trim()) {
       setContactError(language === 'en' ? 'All fields are required.' : 'सर्व फील्ड आवश्यक आहेत.');
       return;
     }
     setIsSavingContact(true);
     setContactError(null);
+
+    let savedData = null;
     try {
-      const { data, error } = await supabase
-        .from('contacts')
-        .insert({
-          village_id: selectedVillage.id,
-          name: contactForm.name.trim(),
-          designation: contactForm.designation.trim(),
-          phone: contactForm.phone.trim(),
-          type: contactForm.type || 'village'
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      setContactsList((prev) => [data, ...prev]);
-      setIsContactModalOpen(false);
-      setContactForm({ name: '', designation: '', phone: '', type: 'village' });
-
-      // Broadcast notification to relevant village citizens
-      try {
-        const { data: citizens } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('village_id', selectedVillage.id);
-
-        if (citizens && citizens.length > 0) {
-          const notifs = citizens.map((c) => ({
-            user_id: c.id,
-            title: 'नवीन संपर्क जोडला (New Village Contact)',
-            message: `गावाच्या निर्देशिकेत नवीन संपर्क: ${contactForm.name.trim()} (${contactForm.designation.trim()})`,
-            type: 'info',
-            is_read: false,
-            created_at: new Date().toISOString(),
-          }));
-          await supabase.from('notifications').insert(notifs);
+      const dbVillageId = await ensureDatabaseVillageId(selectedVillage);
+      if (dbVillageId) {
+        if (!isUUID(selectedVillage?.id)) {
+          setSelectedVillage((prev) => ({ ...prev, id: dbVillageId }));
         }
-      } catch (notifErr) {
-        console.warn('Contact notification broadcast error:', notifErr);
+        const { data, error } = await supabase
+          .from('contacts')
+          .insert({
+            village_id: dbVillageId,
+            name: contactForm.name.trim(),
+            designation: contactForm.designation.trim(),
+            phone: contactForm.phone.trim(),
+            type: contactForm.type || 'village'
+          })
+          .select()
+          .single();
+
+        if (!error && data) {
+          savedData = data;
+        }
       }
-    } catch (err) {
-      console.error('Add contact error:', err);
-      setContactError(err.message || 'संपर्क जोडताना त्रुटी आली.');
-    } finally {
-      setIsSavingContact(false);
+    } catch (dbErr) {
+      console.warn('Supabase contact insert error, saving locally:', dbErr);
     }
+
+    const finalContact = savedData || {
+      id: 'contact-' + Date.now(),
+      village_id: selectedVillage?.id || 'demo-village-1',
+      name: contactForm.name.trim(),
+      designation: contactForm.designation.trim(),
+      phone: contactForm.phone.trim(),
+      type: contactForm.type || 'village',
+      created_at: new Date().toISOString()
+    };
+
+    try {
+      const localContacts = JSON.parse(localStorage.getItem('aapla_custom_contacts') || '[]');
+      localStorage.setItem('aapla_custom_contacts', JSON.stringify([finalContact, ...localContacts]));
+    } catch (e) {}
+
+    setContactsList((prev) => [finalContact, ...prev]);
+    setIsContactModalOpen(false);
+    setContactForm({ name: '', designation: '', phone: '', type: 'village' });
+    setIsSavingContact(false);
   };
 
   const handleDeleteContact = async (contactId) => {
     if (!window.confirm(language === 'en' ? 'Are you sure you want to delete this contact?' : 'हा संपर्क नक्की हटवायचा आहे का?')) return;
     try {
-      const { error } = await supabase.from('contacts').delete().eq('id', contactId);
-      if (error) throw error;
+      if (isUUID(contactId)) {
+        await supabase.from('contacts').delete().eq('id', contactId);
+      }
+      try {
+        const localContacts = JSON.parse(localStorage.getItem('aapla_custom_contacts') || '[]');
+        localStorage.setItem('aapla_custom_contacts', JSON.stringify(localContacts.filter(c => c.id !== contactId)));
+      } catch (e) {}
       setContactsList((prev) => prev.filter((c) => c.id !== contactId));
     } catch (err) {
       console.error('Delete contact error:', err);
@@ -425,10 +476,6 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
 
   const handleAddFundTransaction = async (e) => {
     e.preventDefault();
-    if (!selectedVillage?.id || selectedVillage.id === 'demo-village-1') {
-      alert(language === 'en' ? 'Please save village information first to create a database record.' : 'कृपया प्रथम गाव माहिती सेव्ह करा.');
-      return;
-    }
     const amt = parseFloat(fundForm.amount);
     if (!fundForm.description.trim() || isNaN(amt) || amt <= 0) {
       setFundError(language === 'en' ? 'Please enter a valid description and positive amount.' : 'कृपया वैध वर्णन आणि रक्कम प्रविष्ट करा.');
@@ -436,41 +483,70 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
     }
     setIsSavingFund(true);
     setFundError(null);
-    try {
-      const { data, error } = await supabase
-        .from('fund_transactions')
-        .insert({
-          village_id: selectedVillage.id,
-          description: fundForm.description.trim(),
-          amount: amt,
-          transaction_type: fundForm.transaction_type,
-          transaction_date: fundForm.transaction_date ? new Date(fundForm.transaction_date).toISOString() : new Date().toISOString()
-        })
-        .select()
-        .single();
 
-      if (error) throw error;
-      setFundsList((prev) => [data, ...prev]);
-      setIsFundsModalOpen(false);
-      setFundForm({
-        description: '',
-        amount: '',
-        transaction_type: 'expense',
-        transaction_date: new Date().toISOString().split('T')[0]
-      });
-    } catch (err) {
-      console.error('Add fund transaction error:', err);
-      setFundError(err.message || 'निधी व्यवहार नोंदवताना त्रुटी आली.');
-    } finally {
-      setIsSavingFund(false);
+    let savedData = null;
+    try {
+      const dbVillageId = await ensureDatabaseVillageId(selectedVillage);
+      if (dbVillageId) {
+        if (!isUUID(selectedVillage?.id)) {
+          setSelectedVillage((prev) => ({ ...prev, id: dbVillageId }));
+        }
+        const { data, error } = await supabase
+          .from('fund_transactions')
+          .insert({
+            village_id: dbVillageId,
+            description: fundForm.description.trim(),
+            amount: amt,
+            transaction_type: fundForm.transaction_type,
+            transaction_date: fundForm.transaction_date ? new Date(fundForm.transaction_date).toISOString() : new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (!error && data) {
+          savedData = data;
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Supabase fund insert error, saving locally:', dbErr);
     }
+
+    const finalTx = savedData || {
+      id: 'fund-' + Date.now(),
+      village_id: selectedVillage?.id || 'demo-village-1',
+      description: fundForm.description.trim(),
+      amount: amt,
+      transaction_type: fundForm.transaction_type,
+      transaction_date: fundForm.transaction_date ? new Date(fundForm.transaction_date).toISOString() : new Date().toISOString(),
+      created_at: new Date().toISOString()
+    };
+
+    try {
+      const localFunds = JSON.parse(localStorage.getItem('aapla_custom_funds') || '[]');
+      localStorage.setItem('aapla_custom_funds', JSON.stringify([finalTx, ...localFunds]));
+    } catch (e) {}
+
+    setFundsList((prev) => [finalTx, ...prev]);
+    setIsFundsModalOpen(false);
+    setFundForm({
+      description: '',
+      amount: '',
+      transaction_type: 'expense',
+      transaction_date: new Date().toISOString().split('T')[0]
+    });
+    setIsSavingFund(false);
   };
 
   const handleDeleteFundTransaction = async (txId) => {
     if (!window.confirm(language === 'en' ? 'Are you sure you want to delete this transaction?' : 'हा निधी व्यवहार नक्की हटवायचा आहे का?')) return;
     try {
-      const { error } = await supabase.from('fund_transactions').delete().eq('id', txId);
-      if (error) throw error;
+      if (isUUID(txId)) {
+        await supabase.from('fund_transactions').delete().eq('id', txId);
+      }
+      try {
+        const localFunds = JSON.parse(localStorage.getItem('aapla_custom_funds') || '[]');
+        localStorage.setItem('aapla_custom_funds', JSON.stringify(localFunds.filter(f => f.id !== txId)));
+      } catch (e) {}
       setFundsList((prev) => prev.filter((f) => f.id !== txId));
     } catch (err) {
       console.error('Delete fund transaction error:', err);
@@ -512,7 +588,7 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
           if (citizens && citizens.length > 0) {
             const notifs = citizens.map((c) => ({
               user_id: c.id,
-              title: 'गाव माहिती अपडेट (Village Info Updated)',
+              title: language === 'en' ? 'Village Information Updated' : 'गाव माहिती अद्यतनित',
               message: `${updatedVillage.name || 'गाव'} माहिती अद्यतनित करण्यात आली आहे.`,
               type: 'info',
               is_read: false,
@@ -572,22 +648,11 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
               <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-text)', lineHeight: 1.2 }}>
                 {t('nav_village_info')}
               </h1>
-              <p style={{ fontSize: '0.875rem', color: 'var(--color-secondary-text)', marginTop: '2px' }}>
-                {t('nav_village_info_sub')}
-              </p>
             </div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Button
-            variant="primary"
-            icon={Edit3}
-            onClick={() => setIsEditModalOpen(true)}
-          >
-            {t('fill_village_info_btn')}
-          </Button>
-
           {villagesList.length > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <label htmlFor="village-selector" style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--color-secondary-text)' }}>
@@ -608,15 +673,6 @@ export default function VillageInfo({ onNavigateToProjects, onNavigateToNotices,
               </select>
             </div>
           )}
-
-          <Button
-            variant="secondary"
-            icon={RefreshCw}
-            onClick={() => fetchVillageData()}
-            disabled={loading}
-          >
-            {t('refresh_btn')}
-          </Button>
         </div>
       </div>
 

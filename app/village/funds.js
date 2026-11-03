@@ -7,6 +7,7 @@ import AppText from '../../components/ui/AppText';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 import { mockFunds } from '../../data/mockData';
 
 const formatCurrency = (amount) => {
@@ -16,6 +17,7 @@ const formatCurrency = (amount) => {
 
 export default function VillageFunds() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -129,8 +131,8 @@ export default function VillageFunds() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <AppText variant="headingMedium">गावाचा पैसा कुठे खर्च होतो?</AppText>
-          <AppText variant="bodySmall" style={styles.subtitle}>गावाच्या विकासासाठी उपलब्ध आणि खर्च झालेल्या निधीची माहिती</AppText>
+          <AppText variant="headingMedium">{t('funds_spending_question')}</AppText>
+          <AppText variant="bodySmall" style={styles.subtitle}>{t('funds_spending_subtitle')}</AppText>
         </View>
       </View>
 
@@ -139,13 +141,13 @@ export default function VillageFunds() {
         {/* Total Funds Summary */}
         <View style={styles.summaryCard}>
           <View style={styles.mainAmountContainer}>
-            <AppText variant="label" style={styles.mainAmountLabel}>एकूण निधी (Income)</AppText>
+            <AppText variant="label" style={styles.mainAmountLabel}>{t('funds_total_income_label')}</AppText>
             <AppText variant="headingLarge" style={styles.mainAmount}>{formatCurrency(totalIncome)}</AppText>
           </View>
 
           <View style={styles.progressContainer}>
             <View style={styles.progressHeader}>
-              <AppText variant="label" style={styles.progressLabel}>खर्च: {spendingPercentage.toFixed(0)}%</AppText>
+              <AppText variant="label" style={styles.progressLabel}>{t('funds_spent_pct')} {spendingPercentage.toFixed(0)}%</AppText>
               <AppText variant="label" style={styles.progressLabel}>{formatCurrency(totalSpent)} / {formatCurrency(totalIncome)}</AppText>
             </View>
             <View style={styles.progressBarBg}>
@@ -157,21 +159,21 @@ export default function VillageFunds() {
             <View style={styles.splitItem}>
               <View style={[styles.dot, { backgroundColor: colors.error }]} />
               <View>
-                <AppText variant="label" style={styles.splitLabel}>खर्च झालेला निधी</AppText>
+                <AppText variant="label" style={styles.splitLabel}>{t('funds_spent_label')}</AppText>
                 <AppText variant="headingSmall" style={styles.splitValue}>{formatCurrency(totalSpent)}</AppText>
               </View>
             </View>
             <View style={styles.splitItem}>
               <View style={[styles.dot, { backgroundColor: colors.primary }]} />
               <View>
-                <AppText variant="label" style={styles.splitLabel}>शिल्लक निधी</AppText>
+                <AppText variant="label" style={styles.splitLabel}>{t('funds_remaining_label')}</AppText>
                 <AppText variant="headingSmall" style={styles.splitValue}>{formatCurrency(remaining)}</AppText>
               </View>
             </View>
           </View>
         </View>
 
-        <AppText variant="headingSmall" style={styles.sectionTitle}>निधी व्यवहार (Transactions)</AppText>
+        <AppText variant="headingSmall" style={styles.sectionTitle}>{t('funds_transactions_title')}</AppText>
         
         {loading ? (
           <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />

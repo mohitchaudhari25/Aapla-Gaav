@@ -7,6 +7,7 @@ import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
 import AppButton from '../../components/ui/AppButton';
 import { useTranslation } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme } from '../../lib/ThemeContext';
 
 const LANGUAGES = [
@@ -25,12 +26,14 @@ export default function Language() {
   const handleLanguageSelect = (id) => {
     setSelected(id);
     i18n.changeLanguage(id);
+    AsyncStorage.setItem('user-language', id);
     if (selected === id) {
       router.push('/auth/login');
     }
   };
 
   const handleContinue = () => {
+    AsyncStorage.setItem('user-language', selected);
     router.push('/auth/login');
   };
 
@@ -65,7 +68,9 @@ export default function Language() {
               {isSelected ? (
                 <View style={styles.badge}>
                   <View style={styles.badgePill}>
-                    <AppText variant="label" style={styles.badgeText}>निवडले</AppText>
+                    <AppText variant="label" style={styles.badgeText}>
+                      {selected === 'en' ? 'Selected' : selected === 'hi' ? 'चयनित' : 'निवडले'}
+                    </AppText>
                   </View>
                   <Ionicons name="chevron-forward" size={24} color={colors.primary} />
                 </View>
@@ -78,7 +83,10 @@ export default function Language() {
       </View>
       
       <View style={styles.footer}>
-        <AppButton title="पुढे जा (Next)" onPress={handleContinue} />
+        <AppButton 
+          title={i18n.language === 'en' ? 'Continue' : i18n.language === 'hi' ? 'आगे बढ़ें' : 'पुढे जा'} 
+          onPress={handleContinue} 
+        />
       </View>
     </ScreenContainer>
   );

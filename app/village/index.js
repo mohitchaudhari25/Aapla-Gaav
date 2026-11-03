@@ -7,10 +7,12 @@ import AppText from '../../components/ui/AppText';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 import { mockVillage } from '../../data/mockData';
 
 export default function Village() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [village, setVillage] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -112,10 +114,10 @@ export default function Village() {
   );
 
   const services = [
-    { id: '1', title: 'गावातील सूचना', icon: 'megaphone-outline', route: '/notices', color: colors.warning },
-    { id: '2', title: 'विकास कामे', icon: 'construct-outline', route: '/projects', color: '#8E24AA' },
-    { id: '3', title: 'गावाचा निधी', icon: 'wallet-outline', route: '/village/funds', color: colors.primary },
-    { id: '4', title: 'महत्त्वाचे संपर्क', icon: 'call-outline', route: '/contacts', color: colors.info },
+    { id: '1', title: t('home_village_notices'), icon: 'megaphone-outline', route: '/notices', color: colors.warning },
+    { id: '2', title: t('home_quick_projects'), icon: 'construct-outline', route: '/projects', color: '#8E24AA' },
+    { id: '3', title: t('home_village_funds'), icon: 'wallet-outline', route: '/village/funds', color: colors.primary },
+    { id: '4', title: t('home_important_contacts'), icon: 'call-outline', route: '/contacts', color: colors.info },
   ];
 
   const renderInfoRow = (label, value) => (
@@ -145,8 +147,8 @@ export default function Village() {
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View>
-            <AppText variant="headingMedium">माझं गाव</AppText>
-            <AppText variant="bodySmall" style={styles.subtitle}>आपल्या गावाची महत्त्वाची माहिती</AppText>
+            <AppText variant="headingMedium">{t('my_village_title')}</AppText>
+            <AppText variant="bodySmall" style={styles.subtitle}>{t('my_village_subtitle')}</AppText>
           </View>
         </View>
 
@@ -160,27 +162,27 @@ export default function Village() {
         ) : (
           <>
             <View style={styles.card}>
-              {renderInfoRow('गावाचे नाव', village.name)}
+              {renderInfoRow(t('village_name'), village.name)}
               <View style={styles.divider} />
-              {renderInfoRow('ग्रामपंचायत', village.gram_panchayat || village.gramPanchayat)}
+              {renderInfoRow(t('gram_panchayat'), village.gram_panchayat || village.gramPanchayat)}
               <View style={styles.divider} />
-              {renderInfoRow('तालुका', village.taluka)}
+              {renderInfoRow(t('taluka'), village.taluka)}
               <View style={styles.divider} />
-              {renderInfoRow('जिल्हा', village.district)}
+              {renderInfoRow(t('district'), village.district)}
               <View style={styles.divider} />
-              {renderInfoRow('राज्य', village.state)}
+              {renderInfoRow(t('state'), village.state)}
             </View>
 
             {/* Statistics */}
             <View style={styles.statsContainer}>
-              {renderStatCard('लोकसंख्या', village.population, 'people-outline')}
-              {renderStatCard('कुटुंबे', village.families, 'people-circle-outline')}
-              {renderStatCard('एकूण घरे', village.houses || village.totalHouses, 'home-outline')}
-              {renderStatCard('क्षेत्रफळ', village.area, 'map-outline')}
+              {renderStatCard(t('population'), village.population, 'people-outline')}
+              {renderStatCard(t('families'), village.families, 'people-circle-outline')}
+              {renderStatCard(t('total_houses'), village.houses || village.totalHouses, 'home-outline')}
+              {renderStatCard(t('area'), village.area, 'map-outline')}
             </View>
 
         {/* Quick Services */}
-        <AppText variant="headingSmall" style={styles.sectionTitle}>महत्त्वाच्या सेवा</AppText>
+        <AppText variant="headingSmall" style={styles.sectionTitle}>{t('quick_services')}</AppText>
         <View style={styles.servicesGrid}>
           {services.map(service => (
             <TouchableOpacity 
@@ -200,7 +202,7 @@ export default function Village() {
         {/* Gram Panchayat Info */}
         {village && (
           <>
-            <AppText variant="headingSmall" style={styles.sectionTitle}>ग्रामपंचायत माहिती</AppText>
+            <AppText variant="headingSmall" style={styles.sectionTitle}>{t('gp_info_title')}</AppText>
             <View style={[styles.card, styles.lastCard]}>
               <View style={styles.panchayatHeader}>
                 <View style={styles.panchayatIconWrapper}>
@@ -211,9 +213,9 @@ export default function Village() {
                 </View>
               </View>
               <View style={styles.divider} />
-              {renderInfoRow('कार्यालयीन वेळ', village.timings || village.panchayatInfo?.timings)}
+              {renderInfoRow(t('office_hours'), village.timings || village.panchayatInfo?.timings)}
               <View style={styles.divider} />
-              {renderInfoRow('सुट्टीचा दिवस', village.weekly_off || village.weeklyOff || village.panchayatInfo?.weeklyOff)}
+              {renderInfoRow(t('weekly_off'), village.weekly_off || village.weeklyOff || village.panchayatInfo?.weeklyOff)}
             </View>
           </>
         )}

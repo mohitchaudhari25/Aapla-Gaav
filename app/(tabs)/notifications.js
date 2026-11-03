@@ -8,6 +8,7 @@ import NotificationCard from '../../components/cards/NotificationCard';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 import { mockNotifications } from '../../data/mockData';
 
 export default function Notifications() {
@@ -36,7 +37,7 @@ export default function Notifications() {
 
               if (error) {
                 console.error('Notifications fetch error:', error);
-                if (isMounted) setErrorMsg('सूचना मिळवण्यात त्रुटी आली.');
+                if (isMounted) setErrorMsg(t('notices_load_error', 'सूचना मिळवण्यात त्रुटी आली.'));
               } else if (data && isMounted) {
                 setNotifications(data);
               }
@@ -64,7 +65,7 @@ export default function Notifications() {
             if (isMounted) setNotifications(mockNotifications);
           }
         } catch (error) {
-          if (isMounted) setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+          if (isMounted) setErrorMsg(t('error_unexpected', 'काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.'));
           console.error(error);
         } finally {
           if (isMounted) setLoading(false);
@@ -134,8 +135,8 @@ export default function Notifications() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <AppText variant="headingMedium">सूचना</AppText>
-          <AppText variant="bodySmall" style={styles.subtitle}>तुमच्या गावातील महत्त्वाच्या अपडेट्स</AppText>
+          <AppText variant="headingMedium">{t('notifications_title', 'सूचना')}</AppText>
+          <AppText variant="bodySmall" style={styles.subtitle}>{t('notifications_subtitle', 'तुमच्या गावातील महत्त्वाच्या अपडेट्स')}</AppText>
         </View>
         {unreadCount > 0 && (
           <TouchableOpacity onPress={markAllAsRead} style={styles.markAllButton}>
@@ -150,7 +151,7 @@ export default function Notifications() {
         <EmptyState title={errorMsg} />
       ) : (!notifications || notifications.length === 0) ? (
         <EmptyState 
-          title="सध्या कोणत्याही नवीन सूचना नाहीत." 
+          title={t('no_notifications_title', 'सध्या कोणत्याही नवीन सूचना नाहीत.')} 
         />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

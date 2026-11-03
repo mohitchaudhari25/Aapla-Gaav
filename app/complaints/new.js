@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
 import AppInput from '../../components/ui/AppInput';
 import AppButton from '../../components/ui/AppButton';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
-import { Ionicons } from '@expo/vector-icons';
+import { generateUnique10DigitTrackingId } from '../../lib/complaintUtils';
+import { useTranslation } from 'react-i18next';
 
 const CATEGORIES = [
   'पाणी', 'रस्ता', 'वीज', 'स्वच्छता', 'स्ट्रीट लाईट', 'इतर'
@@ -15,6 +17,7 @@ const CATEGORIES = [
 
 export default function NewComplaint() {
   const router = useRouter();
+  const { t, i18n } = useTranslation();
   
   const [category, setCategory] = useState('');
   const [title, setTitle] = useState('');
@@ -83,24 +86,26 @@ export default function NewComplaint() {
           }
         }
 
-        const finalDescription = `[प्रकार: ${category}] ${location ? '[ठिकाण: ' + location.trim() + ']\n' : ''}${description.trim()}`;
+        // Generate persistent unique 10-digit tracking ID
+        const trackingId = generateUnique10DigitTrackingId();
+        const finalDescription = `[ट्रॅकिंग आयडी: ${trackingId}] [प्रकार: ${category}] ${location ? '[ठिकाण: ' + location.trim() + ']\n' : ''}${description.trim()}`;
+
+        const insertRecord = {
+          user_id: user.id,
+          title: title.trim(),
+          description: finalDescription,
+          status: 'प्राप्त'
+        };
 
         const { data, error } = await supabase
           .from('complaints')
-          .insert([
-            {
-              user_id: user.id,
-              title: title.trim(),
-              description: finalDescription,
-              status: 'प्राप्त'
-            }
-          ])
+          .insert([insertRecord])
           .select();
 
         if (error) throw error;
         
         const newId = data[0]?.id;
-        router.replace({ pathname: '/complaints/success', params: { id: newId } });
+        router.replace({ pathname: '/complaints/success', params: { id: newId, trackingId } });
       } catch (error) {
         Alert.alert("Error", "तक्रार नोंदवताना त्रुटी आली. कृपया पुन्हा प्रयत्न करा.");
         console.error(error);
@@ -123,13 +128,13 @@ export default function NewComplaint() {
               <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
             <View>
-              <AppText variant="headingMedium">नवीन तक्रार</AppText>
-              <AppText variant="bodySmall" style={styles.subtitle}>गावातील समस्या किंवा तक्रार येथे नोंदवा.</AppText>
+              <AppText variant="headingMedium">{t('new_complaint_title')}</AppText>
+              <AppText variant="bodySmall" style={styles.subtitle}>{t('new_complaint_subtitle')}</AppText>
             </View>
           </View>
 
           <View style={styles.formGroup}>
-            <AppText variant="label" style={styles.label}>तक्रारीचा प्रकार</AppText>
+            <AppText variant="label" style={styles.label}>{t('complaint_category_field')}</AppText>
             <View style={styles.chipContainer}>
               {CATEGORIES.map(cat => (
                 <TouchableOpacity 
@@ -154,8 +159,8 @@ export default function NewComplaint() {
           </View>
 
           <AppInput
-            label="तक्रारीचे शीर्षक"
-            placeholder="उदा. पाणी पुरवठा बंद आहे"
+            label={t('complaint_title_field')}
+            placeholder={t('complaint_title_placeholder')}
             value={title}
             onChangeText={(text) => {
               setTitle(text);
@@ -165,8 +170,8 @@ export default function NewComplaint() {
           />
 
           <AppInput
-            label="तक्रारीचे वर्णन"
-            placeholder="तुमच्या समस्येबद्दल थोडक्यात माहिती द्या"
+            label={t('complaint_desc_field')}
+            placeholder={t('complaint_desc_placeholder')}
             value={description}
             onChangeText={(text) => {
               setDescription(text);
@@ -180,14 +185,14 @@ export default function NewComplaint() {
           />
 
           <AppInput
-            label="ठिकाण (पर्यायी)"
-            placeholder="उदा. मुख्य चौक, शाळेजवळ"
+            label={t('complaint_location_field')}
+            placeholder={t('complaint_location_placeholder')}
             value={location}
             onChangeText={setLocation}
           />
 
           <AppButton 
-            title={loading ? "प्रक्रिया चालू आहे..." : "तक्रार नोंदवा"} 
+            title={loading ? t('btn_submitting_complaint') : t('btn_submit_complaint')} 
             onPress={handleSubmit} 
             style={styles.submitButton}
             disabled={loading}

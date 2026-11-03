@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, ActivityIndicator, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Platform, StatusBar, ActivityIndicator, Dimensions, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,11 +8,12 @@ import AppText from '../../components/ui/AppText';
 import NoticeCard from '../../components/cards/NoticeCard';
 import { supabase } from '../../lib/supabase';
 import { useTranslation } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme } from '../../lib/ThemeContext';
 
 export default function Home() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const colors = useAppTheme();
   
   const [notices, setNotices] = useState([]);
@@ -103,6 +104,40 @@ export default function Home() {
               setFundsData({ totalIncome: 0, totalSpent: 0, remaining: 0, spendingPercentage: 0, hasData: false, isDemo: false });
             }
           }
+            // Fetch published Government Schemes dynamically
+            try {
+              const { data: dbSchemes, error: schemeErr } = await supabase
+                .from('schemes')
+                .select('*')
+                .eq('status', 'published')
+                .order('created_at', { ascending: false });
+
+              if (!schemeErr && dbSchemes && dbSchemes.length > 0) {
+                const formatted = dbSchemes.map((s) => ({
+                  id: s.id,
+                  title: s.title || s.name || "",
+                  subtitle: s.short_description || s.description || '',
+                  badge: s.category || t('home_scheme_badge') || 'योजना',
+                  image: s.image_url || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=600&auto=format&fit=crop&q=80',
+                }));
+                if (isMounted) setSchemeNews(formatted);
+              } else if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+                const local = JSON.parse(localStorage.getItem('aapla_admin_schemes') || '[]');
+                const published = local.filter(s => s.status === 'published');
+                if (published.length > 0) {
+                  const formatted = published.map((s) => ({
+                    id: s.id,
+                    title: s.title || s.name || "",
+                    subtitle: s.short_description || s.description || '',
+                    badge: s.category || t('home_scheme_badge') || 'योजना',
+                    image: s.image_url || 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=600&auto=format&fit=crop&q=80',
+                  }));
+                  if (isMounted) setSchemeNews(formatted);
+                }
+              }
+            } catch (schemeErr) {
+              console.warn('Error fetching schemes for carousel:', schemeErr);
+            }
         } catch (err) {
           console.warn('Error loading home data:', err);
         } finally {
@@ -126,6 +161,9 @@ export default function Home() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'villages' }, () => {
           fetchNoticesAndFunds();
         })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'schemes' }, () => {
+          fetchNoticesAndFunds();
+        })
         .subscribe();
 
       return () => {
@@ -142,14 +180,72 @@ export default function Home() {
     { id: '4', title: t('home_quick_projects'), icon: 'construct-outline', route: '/projects', color: '#8E24AA' },
   ];
 
-  const { width } = Dimensions.get('window');
-  
-  const schemeNews = [
-    { id: '1', title: 'शासकीय शिलाई मशीन सहाय्य', subtitle: 'ग्रामीण महिला स्वयंरोजगार माहिती', badge: t('home_scheme_badge') },
-    { id: '2', title: 'महाडीबीटी कृषी योजना', subtitle: 'अवजारे व ठिबक सिंचन अनुदान', badge: t('home_agri_badge') },
-    { id: '3', title: 'पीएम किसान सन्मान निधी', subtitle: 'पात्रता व ई-केवायसी पडताळणी', badge: t('home_fund_badge') },
-    { id: '4', title: 'ग्रामसभा व विकास आराखडा', subtitle: 'ग्रामपंचायत ठराव व माहिती', badge: t('home_news_badge') },
+    const { width } = Dimensions.get('window');
+  const CARD_WIDTH = Math.min(width * 0.85, 360);
+  const CARD_INTERVAL = CARD_WIDTH + spacing.md;
+
+  const carouselRef = React.useRef(null);
+  const [activeSlide, setActiveSlide] = useState(0);
+
+  const DEFAULT_SCHEMES = [
+    {
+      id: '1',
+      title: 'शासकीय मोफत शिलाई मशीन योजना',
+      subtitle: 'ग्रामीण महिलांना स्वयंरोजगारासाठी मोफत शिलाई मशीन वाटप व प्रशिक्षण',
+      badge: t('home_scheme_badge') || 'योजना',
+      image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=600&auto=format&fit=crop&q=80',
+    },
+    {
+      id: '2',
+      title: 'महाडीबीटी कृषी यांत्रिकीकरण योजना',
+      subtitle: 'शेती अवजारे, ट्रॅक्टर व ठिबक सिंचनासाठी ५०% ते ८०% थेट शासकीय अनुदान',
+      badge: t('home_agri_badge') || 'कृषी',
+      image: 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?w=600&auto=format&fit=crop&q=80',
+    },
+    {
+      id: '3',
+      title: 'पीएम किसान सन्मान निधी',
+      subtitle: 'पात्र शेतकऱ्यांना वार्षिक ₹६,००० थेट बँक खात्यात - ई-केवायसी पडताळणी सुरू',
+      badge: t('home_fund_badge') || 'निधी',
+      image: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=600&auto=format&fit=crop&q=80',
+    },
+    {
+      id: '4',
+      title: 'जल जीवन मिशन - हर घर जल योजना',
+      subtitle: 'गावातील प्रत्येक कुटुंबाला शुद्ध पिण्याच्या पाण्याचे नळ जोडणी काम प्रगतिपथावर',
+      badge: t('home_news_badge') || 'विकास',
+      image: 'https://images.unsplash.com/photo-1541888946425-d0fbb18f15f7?w=600&auto=format&fit=crop&q=80',
+    },
   ];
+
+  const [schemeNews, setSchemeNews] = useState(DEFAULT_SCHEMES);
+
+  // Auto-sliding horizontal timer for schemes carousel
+  React.useEffect(() => {
+    if (!schemeNews || schemeNews.length <= 1) return;
+    const interval = setInterval(() => {
+      setActiveSlide((prev) => {
+        const next = (prev + 1) % schemeNews.length;
+        if (carouselRef.current) {
+          carouselRef.current.scrollTo({
+            x: next * CARD_INTERVAL,
+            animated: true,
+          });
+        }
+        return next;
+      });
+    }, 3500);
+
+    return () => clearInterval(interval);
+  }, [CARD_INTERVAL, schemeNews.length]);
+
+  const handleScrollEnd = (e) => {
+    const offsetX = e.nativeEvent.contentOffset.x;
+    const index = Math.round(offsetX / CARD_INTERVAL);
+    if (index >= 0 && index < schemeNews.length) {
+      setActiveSlide(index);
+    }
+  };
 
   const styles = getStyles(colors);
 
@@ -160,44 +256,122 @@ export default function Home() {
 
           {/* Custom Header Area */}
           <View style={styles.profileHeader}>
-            <View style={{ flex: 1, paddingRight: spacing.md }}>
+            <View style={{ flex: 1, paddingRight: spacing.sm }}>
               <AppText variant="label" style={styles.greeting}>{t('home_greeting')}</AppText>
               <AppText variant="headingMedium" style={styles.userName}>{userName || t('home_citizen')}</AppText>
               <AppText variant="label" style={styles.location}>
                 📍 {villageName ? `${villageName} ${t('home_village_panchayat')}` : t('home_village_no_data')}
               </AppText>
             </View>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/notifications')} style={styles.notificationBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="notifications-outline" size={24} color={colors.white} />
-              <View style={styles.badge} />
-            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Language Switcher Pill */}
+              <View style={styles.langPillContainer}>
+                <TouchableOpacity
+                  onPress={() => {
+                    i18n.changeLanguage('mr');
+                    AsyncStorage.setItem('user-language', 'mr');
+                  }}
+                  style={[styles.langPillBtn, i18n.language === 'mr' && styles.langPillBtnActive]}
+                  activeOpacity={0.8}
+                >
+                  <AppText style={[styles.langPillText, i18n.language === 'mr' && styles.langPillTextActive]}>
+                    मराठी
+                  </AppText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    i18n.changeLanguage('en');
+                    AsyncStorage.setItem('user-language', 'en');
+                  }}
+                  style={[styles.langPillBtn, i18n.language === 'en' && styles.langPillBtnActive]}
+                  activeOpacity={0.8}
+                >
+                  <AppText style={[styles.langPillText, i18n.language === 'en' && styles.langPillTextActive]}>
+                    EN
+                  </AppText>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity onPress={() => router.push('/(tabs)/notifications')} style={styles.notificationBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="notifications-outline" size={24} color={colors.white} />
+                <View style={styles.badge} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Government Schemes & Citizen News Carousel */}
           <View style={styles.carouselContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={width * 0.85 + spacing.md} decelerationRate="fast" contentContainerStyle={styles.carouselScroll}>
+            <View style={styles.carouselHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="megaphone" size={18} color={colors.primary} />
+                <AppText variant="headingSmall" style={styles.carouselSectionTitle}>
+                  {t('schemes_section_title', 'शासकीय योजना व बातम्या')}
+                </AppText>
+              </View>
+              <View style={styles.liveBadge}>
+                <View style={styles.liveDot} />
+                <AppText variant="label" style={styles.liveText}>{t('schemes_live', 'थेट')}</AppText>
+              </View>
+            </View>
+
+            <ScrollView
+              ref={carouselRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={CARD_INTERVAL}
+              decelerationRate="fast"
+              onMomentumScrollEnd={handleScrollEnd}
+              contentContainerStyle={styles.carouselScroll}
+            >
               {schemeNews.map((item) => (
-                <TouchableOpacity 
-                  key={item.id} 
-                  style={styles.schemeCard} 
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.schemeCard, { width: CARD_WIDTH }]}
                   activeOpacity={0.9}
                   onPress={() => router.push({ pathname: '/schemes/details', params: { id: item.id } })}
                 >
-                  <View style={styles.schemeHeader}>
-                    <View style={styles.schemeBadge}>
+                  <View style={styles.schemeImageContainer}>
+                    <Image source={{ uri: item.image }} style={styles.schemeImage} resizeMode="cover" />
+                    <View style={styles.schemeBadgeOverlay}>
                       <AppText variant="label" style={styles.schemeBadgeText}>{item.badge}</AppText>
                     </View>
                   </View>
-                  <AppText variant="headingSmall" style={styles.schemeTitle}>{item.title}</AppText>
-                  <AppText variant="bodyMedium" style={styles.schemeSubtitle}>{item.subtitle}</AppText>
-                  <View style={styles.schemeAction}>
-                    <AppText variant="label" style={styles.schemeActionText}>{t('home_more_info')}</AppText>
-                    <Ionicons name="arrow-forward" size={16} color={colors.primary} />
+
+                  <View style={styles.schemeCardBody}>
+                    <AppText variant="headingSmall" numberOfLines={1} style={styles.schemeTitle}>
+                      {item.title}
+                    </AppText>
+                    <AppText variant="bodySmall" numberOfLines={2} style={styles.schemeSubtitle}>
+                      {item.subtitle}
+                    </AppText>
+
+                    <View style={styles.schemeAction}>
+                      <AppText variant="label" style={styles.schemeActionText}>
+                        {t('schemes_view_details', t('home_more_info', 'तपशील पहा'))}
+                      </AppText>
+                      <Ionicons name="arrow-forward" size={15} color={colors.primary} />
+                    </View>
                   </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
+
+            {/* Pagination Indicator Dots */}
+            <View style={styles.paginationDots}>
+              {schemeNews.map((_, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.dot,
+                    activeSlide === idx ? styles.activeDot : null,
+                    { backgroundColor: activeSlide === idx ? colors.primary : (colors.border || '#D0D7DE') }
+                  ]}
+                />
+              ))}
+            </View>
           </View>
+
 
         {/* Quick Services Section */}
         <View style={[styles.section, { paddingTop: spacing.md }]}>
@@ -347,57 +521,126 @@ const getStyles = (colors) => StyleSheet.create({
   carouselContainer: {
     marginBottom: spacing.lg,
   },
+  carouselHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  carouselSectionTitle: {
+    fontWeight: '700',
+    fontSize: 15,
+    color: colors.text,
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2E7D32',
+  },
+  liveText: {
+    color: '#2E7D32',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   carouselScroll: {
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
   schemeCard: {
-    padding: spacing.lg,
     borderRadius: radius.lg,
-    justifyContent: 'space-between',
-    minHeight: 150,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  schemeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
+  schemeImageContainer: {
+    width: '100%',
+    height: 125,
+    position: 'relative',
+    backgroundColor: '#EAEAEA',
   },
-  schemeBadge: {
-    backgroundColor: colors.background,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
+  schemeImage: {
+    width: '100%',
+    height: '100%',
+  },
+  schemeBadgeOverlay: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   schemeBadgeText: {
-    fontWeight: 'bold',
-    color: colors.text,
+    fontWeight: '700',
+    fontSize: 11,
+    color: colors.primary,
+  },
+  schemeCardBody: {
+    padding: spacing.md,
+    justifyContent: 'space-between',
   },
   schemeTitle: {
     color: colors.text,
     fontWeight: '700',
+    fontSize: 15,
     marginBottom: 4,
   },
   schemeSubtitle: {
-    color: colors.text,
-    opacity: 0.8,
-    marginBottom: spacing.md,
+    color: colors.secondaryText || '#666666',
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: spacing.sm,
   },
   schemeAction: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 'auto',
+    marginTop: 2,
   },
   schemeActionText: {
     color: colors.primary,
-    fontWeight: '600',
-    flexShrink: 1,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  paginationDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  activeDot: {
+    width: 16,
+    height: 6,
+    borderRadius: 3,
   },
   profileHeader: {
     backgroundColor: colors.primary,
@@ -420,6 +663,32 @@ const getStyles = (colors) => StyleSheet.create({
   location: {
     color: colors.primaryPale,
     opacity: 0.9,
+  },
+  langPillContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderRadius: radius.round,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  langPillBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.round,
+  },
+  langPillBtnActive: {
+    backgroundColor: '#FFFFFF',
+  },
+  langPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  langPillTextActive: {
+    color: colors.primary,
+    fontWeight: '700',
   },
   notificationBtn: {
     padding: spacing.xs,

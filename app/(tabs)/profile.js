@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Platform, Image } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
@@ -19,7 +19,6 @@ export default function Profile() {
   const [villageName, setVillageName] = useState('');
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [complaintStats, setComplaintStats] = useState({ total: 0, new: 0, inProgress: 0, resolved: 0 });
 
   const styles = getStyles(colors);
 
@@ -34,7 +33,7 @@ export default function Profile() {
               .from('profiles')
               .select('*')
               .eq('id', user.id)
-              .single();
+              .maybeSingle();
 
             if (profile) {
               setUserProfile(profile);
@@ -43,25 +42,9 @@ export default function Profile() {
                   .from('villages')
                   .select('name')
                   .eq('id', profile.village_id)
-                  .single();
+                  .maybeSingle();
                 if (village) setVillageName(village.name);
               }
-            }
-
-            // Fetch complaints
-            const { data: complaints } = await supabase
-              .from('complaints')
-              .select('status')
-              .eq('user_id', user.id);
-
-            if (complaints) {
-              const stats = { total: complaints.length, new: 0, inProgress: 0, resolved: 0 };
-              complaints.forEach(c => {
-                if (c.status === 'नवीन' || c.status === 'new' || c.status === 'submitted' || c.status === 'प्राप्त') stats.new++;
-                else if (c.status === 'प्रगतीपथावर' || c.status === 'in_progress' || c.status === 'प्रक्रियेत') stats.inProgress++;
-                else if (c.status === 'सोडवली' || c.status === 'resolved' || c.status === 'सोडवले') stats.resolved++;
-              });
-              setComplaintStats(stats);
             }
           }
         } catch (error) {
@@ -93,31 +76,58 @@ export default function Profile() {
   };
 
   const handleLogout = () => {
+    const title = t('logout_confirm_title', 'लॉगआउट');
+    const msg = t('logout_confirm_msg', 'तुम्हाला नक्की लॉगआउट करायचे आहे का?');
     if (Platform.OS === 'web') {
-      if (window.confirm("तुम्हाला नक्की लॉगआउट करायचे आहे का?")) {
+      if (window.confirm(msg)) {
         performLogout();
       }
     } else {
-      Alert.alert("लॉगआउट", "तुम्हाला नक्की लॉगआउट करायचे आहे का?", [
-        { text: "नाही", style: "cancel" },
-        { text: "होय", style: "destructive", onPress: performLogout }
+      Alert.alert(title, msg, [
+        { text: t('no', 'नाही'), style: 'cancel' },
+        { text: t('yes', 'होय'), style: 'destructive', onPress: performLogout }
       ]);
     }
   };
 
+  // Only keep Edit Profile, Settings, and Help & Info in Profile section
+  // My Complaints, Notifications, and Important Contacts are handled by their dedicated tabs/routes
   const profileOptions = [
     { id: '1', title: t('editProfile', 'प्रोफाइल संपादित करा'), icon: 'person-circle-outline', onPress: handleEditProfile },
-    { id: '2', title: t('settings', 'सेटिंग्ज (Settings)'), icon: 'settings-outline', onPress: () => router.push('/profile/settings') },
-    { id: '3', title: t('myComplaints', 'माझ्या तक्रारी'), icon: 'list-outline', onPress: () => router.push('/(tabs)/complaints') },
-    { id: '4', title: t('notifications', 'सूचना'), icon: 'notifications-outline', onPress: () => router.push('/(tabs)/notifications') },
-    { id: '5', title: t('importantContacts', 'महत्त्वाचे संपर्क'), icon: 'call-outline', onPress: () => router.push('/contacts') },
+    { id: '2', title: t('settings', 'सेटिंग्ज'), icon: 'settings-outline', onPress: () => router.push('/profile/settings') },
     { id: '6', title: t('helpAndInfo', 'मदत आणि माहिती'), icon: 'information-circle-outline', onPress: () => router.push('/profile/about') },
   ];
 
   return (
     <ScreenContainer useSafeArea>
       <View style={styles.header}>
-        <AppText variant="headingMedium">प्रोफाइल</AppText>
+        <AppText variant="headingMedium">{t('profile', 'प्रोफाइल')}</AppText>
+        <View style={styles.langPillContainer}>
+          <TouchableOpacity
+            onPress={() => {
+              i18n.changeLanguage('mr');
+              AsyncStorage.setItem('user-language', 'mr');
+            }}
+            style={[styles.langPillBtn, i18n.language === 'mr' && styles.langPillBtnActive]}
+            activeOpacity={0.8}
+          >
+            <AppText style={[styles.langPillText, i18n.language === 'mr' && styles.langPillTextActive]}>
+              मराठी
+            </AppText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              i18n.changeLanguage('en');
+              AsyncStorage.setItem('user-language', 'en');
+            }}
+            style={[styles.langPillBtn, i18n.language === 'en' && styles.langPillBtnActive]}
+            activeOpacity={0.8}
+          >
+            <AppText style={[styles.langPillText, i18n.language === 'en' && styles.langPillTextActive]}>
+              EN
+            </AppText>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -129,50 +139,42 @@ export default function Profile() {
           ) : (
             <>
               <View style={styles.avatarWrapper}>
-                <AppText variant="headingLarge" style={styles.avatarText}>
-                  {userProfile?.full_name ? userProfile.full_name.charAt(0) : '?'}
-                </AppText>
+                {userProfile?.avatar_url ? (
+                  <Image source={{ uri: userProfile.avatar_url }} style={styles.avatarImage} />
+                ) : (
+                  <AppText variant="headingLarge" style={styles.avatarText}>
+                    {userProfile?.full_name ? userProfile.full_name.charAt(0).toUpperCase() : 'U'}
+                  </AppText>
+                )}
               </View>
-              <AppText variant="headingMedium" style={styles.userName}>
-                {userProfile?.full_name || 'माहिती उपलब्ध नाही'}
-              </AppText>
-              <AppText variant="bodyMedium" style={styles.userInfo}>
-                {userProfile?.phone_number || 'माहिती उपलब्ध नाही'}
-              </AppText>
-              <View style={styles.villageBadge}>
-                <Ionicons name="location" size={14} color={colors.primary} />
-                <AppText variant="label" style={styles.villageText}>
-                  {villageName || 'माहिती उपलब्ध नाही'}
-                </AppText>
-              </View>
-            </>
-          )}
-        </View>
 
-        {/* Complaints Summary Card */}
-        <View style={styles.complaintSummaryCard}>
-          <AppText variant="headingSmall" style={styles.summaryTitle}>माझ्या तक्रारी (My Complaints)</AppText>
-          {loading ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryItem}>
-                <AppText variant="headingMedium" style={{ color: colors.primary }}>{complaintStats.total}</AppText>
-                <AppText variant="label">एकूण (Total)</AppText>
-              </View>
-              <View style={styles.summaryItem}>
-                <AppText variant="headingMedium" style={{ color: colors.warning }}>{complaintStats.new}</AppText>
-                <AppText variant="label">नवीन (New)</AppText>
-              </View>
-              <View style={styles.summaryItem}>
-                <AppText variant="headingMedium" style={{ color: colors.info }}>{complaintStats.inProgress}</AppText>
-                <AppText variant="label">प्रगतीपथावर</AppText>
-              </View>
-              <View style={styles.summaryItem}>
-                <AppText variant="headingMedium" style={{ color: colors.success }}>{complaintStats.resolved}</AppText>
-                <AppText variant="label">सोडवली</AppText>
-              </View>
-            </View>
+              {userProfile?.full_name ? (
+                <AppText variant="headingMedium" style={styles.userName}>
+                  {userProfile.full_name}
+                </AppText>
+              ) : null}
+
+              {userProfile?.phone_number ? (
+                <AppText variant="bodyMedium" style={styles.userInfo}>
+                  {userProfile.phone_number}
+                </AppText>
+              ) : null}
+
+              {userProfile?.email ? (
+                <AppText variant="bodySmall" style={[styles.userInfo, { marginTop: -2 }]}>
+                  {userProfile.email}
+                </AppText>
+              ) : null}
+
+              {villageName ? (
+                <View style={styles.villageBadge}>
+                  <Ionicons name="location" size={14} color={colors.primary} />
+                  <AppText variant="label" style={styles.villageText}>
+                    {villageName}
+                  </AppText>
+                </View>
+              ) : null}
+            </>
           )}
         </View>
 
@@ -199,7 +201,7 @@ export default function Profile() {
 
         {/* Logout Button */}
         <AppButton
-          title={loggingOut ? "लॉगआउट करत आहे..." : "लॉगआउट"}
+          title={loggingOut ? t('logging_out', 'लॉगआउट करत आहे...') : t('logout', 'लॉगआउट')}
           onPress={handleLogout}
           variant="outline"
           disabled={loggingOut}
@@ -216,6 +218,34 @@ const getStyles = (colors) => StyleSheet.create({
     marginVertical: spacing.md,
     marginBottom: spacing.xl,
     paddingHorizontal: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  langPillContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  langPillBtn: {
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+  },
+  langPillBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  langPillText: {
+    fontSize: 12,
+    color: colors.secondaryText,
+    fontWeight: '600',
+  },
+  langPillTextActive: {
+    color: colors.white,
+    fontWeight: '700',
   },
   scrollContent: {
     paddingBottom: spacing.xxl,
@@ -230,57 +260,49 @@ const getStyles = (colors) => StyleSheet.create({
     marginBottom: spacing.xl,
   },
   avatarWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     backgroundColor: colors.primaryPale,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.md,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 42,
   },
   avatarText: {
     color: colors.primary,
+    fontSize: 32,
+    fontWeight: 'bold',
   },
   userName: {
     color: colors.text,
     marginBottom: spacing.xs,
+    fontWeight: '700',
   },
   userInfo: {
     color: colors.secondaryText,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   villageBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primaryPale,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+    marginTop: spacing.xs,
   },
   villageText: {
-    color: colors.primary,
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  complaintSummaryCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.xl,
-  },
-  summaryTitle: {
-    color: colors.text,
-    marginBottom: spacing.md,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  summaryItem: {
-    alignItems: 'center',
-    flex: 1,
+    color: colors.primaryDark || colors.primary,
+    marginLeft: spacing.xs,
+    fontWeight: '600',
   },
   optionsContainer: {
     backgroundColor: colors.surface,
@@ -295,15 +317,15 @@ const getStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.borderLight || colors.border,
   },
   optionRowLast: {
     borderBottomWidth: 0,
   },
   optionIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.round,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
     backgroundColor: colors.primaryPale,
     justifyContent: 'center',
     alignItems: 'center',
@@ -312,9 +334,10 @@ const getStyles = (colors) => StyleSheet.create({
   optionTitle: {
     flex: 1,
     color: colors.text,
+    fontWeight: '500',
   },
   logoutButton: {
+    marginTop: spacing.sm,
     borderColor: colors.error,
-    marginBottom: spacing.xxl,
-  }
+  },
 });
