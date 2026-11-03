@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
@@ -9,10 +9,11 @@ import EmptyState from '../../components/common/EmptyState';
 import AppButton from '../../components/ui/AppButton';
 import { colors, spacing } from '../../constants';
 import { supabase } from '../../lib/supabase';
-import { mockNotices } from '../../data/mockData';
+import { useTranslation } from 'react-i18next';
 
 export default function Notices() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -21,25 +22,56 @@ export default function Notices() {
     try {
       setLoading(true);
       setError(null);
-      const { data, error: fetchError } = await supabase
+
+      let villageId = null;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('village_id')
+          .eq('id', user.id)
+          .maybeSingle();
+        villageId = profile?.village_id;
+      }
+
+      let query = supabase
         .from('notices')
         .select('*')
-        .eq('status', 'published')
-        .order('created_at', { ascending: false });
+        .eq('status', 'published');
+
+      if (villageId) {
+        query = query.or(`village_id.eq.${villageId},village_id.is.null`);
+      }
+
+      const { data, error: fetchError } = await query.order('created_at', { ascending: false });
         
       if (fetchError) throw fetchError;
-      setNotices([...(data || []), ...mockNotices]);
+      setNotices(data || []);
     } catch (err) {
-      console.error(err);
+      console.error('Error loading notices:', err);
       setError('सूचना लोड करताना त्रुटी आली. कृपया पुन्हा प्रयत्न करा.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchNotices();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      fetchNotices();
+
+      const noticesChannel = supabase.channel('notices-realtime-feed')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notices' }, () => {
+          if (isMounted) fetchNotices();
+        })
+        .subscribe();
+
+      return () => {
+        isMounted = false;
+        supabase.removeChannel(noticesChannel);
+      };
+    }, [])
+  );
 
   return (
     <ScreenContainer useSafeArea>
@@ -48,8 +80,8 @@ export default function Notices() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <AppText variant="headingMedium">गावातील सूचना</AppText>
-          <AppText variant="bodySmall" style={styles.subtitle}>गावातील महत्त्वाच्या सूचना आणि घोषणा</AppText>
+          <AppText variant="headingMedium">{t('notices_title')}</AppText>
+          <AppText variant="bodySmall" style={styles.subtitle}>{t('notices_subtitle')}</AppText>
         </View>
       </View>
 
@@ -60,11 +92,11 @@ export default function Notices() {
       ) : error ? (
         <View style={styles.centerContainer}>
           <AppText style={styles.errorText}>{error}</AppText>
-          <AppButton title="पुन्हा प्रयत्न करा" onPress={fetchNotices} />
+          <AppButton title={t('retry')} onPress={fetchNotices} />
         </View>
       ) : (!notices || notices.length === 0) ? (
         <EmptyState 
-          title="सध्या कोणतीही सूचना उपलब्ध नाही." 
+          title={t('no_notices_available')} 
         />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -78,7 +110,7 @@ export default function Notices() {
                 key={notice.id}
                 title={notice.title}
                 date={formattedDate}
-                description={notice.description}
+                description={notice.content || notice.description}
                 style={notice.isRead ? styles.readCard : styles.unreadCard}
               />
             );

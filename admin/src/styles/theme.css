@@ -1,0 +1,158 @@
+/* AaplaGaav Design System Tokens - Modern Indian Village Governance */
+:root {
+  --color-primary: #1E7E34;
+  --color-primary-hover: #176529;
+  --color-primary-dark: #134B20;
+  --color-primary-light: #34A853;
+  --color-primary-pale: #EDF7EE;
+  --color-primary-subtle: #F5FBF6;
+  --color-background: #F8FAF9;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F4F8F5;
+  --color-text: #0F172A;
+  --color-secondary-text: #475569;
+  --color-muted-text: #94A3B8;
+  --color-border: #E2E8F0;
+  --color-border-light: #F1F5F9;
+  --color-warning: #D97706;
+  --color-warning-pale: #FEF3C7;
+  --color-warning-text: #92400E;
+  --color-error: #DC2626;
+  --color-error-pale: #FEE2E2;
+  --color-error-text: #991B1B;
+  --color-success: #16A34A;
+  --color-success-pale: #DCFCE7;
+  --color-success-text: #166534;
+  --color-info: #0284C7;
+  --color-info-pale: #E0F2FE;
+  --color-info-text: #075985;
+  
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+  
+  --shadow-xs: 0 1px 2px 0 rgba(16, 24, 40, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(16, 24, 40, 0.06), 0 1px 2px -1px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(16, 24, 40, 0.07), 0 2px 4px -2px rgba(16, 24, 40, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(16, 24, 40, 0.08), 0 4px 6px -4px rgba(16, 24, 40, 0.03);
+}
+
+/* Dark Mode Tokens */
+[data-theme="dark"] {
+  --color-primary: #34A853;
+  --color-primary-hover: #2E9749;
+  --color-primary-dark: #1E7E34;
+  --color-primary-light: #52B76D;
+  --color-primary-pale: rgba(52, 168, 83, 0.15);
+  --color-primary-subtle: rgba(52, 168, 83, 0.08);
+  --color-background: #0B1120;
+  --color-surface: #1E293B;
+  --color-surface-hover: #273549;
+  --color-text: #F8FAFC;
+  --color-secondary-text: #94A3B8;
+  --color-muted-text: #64748B;
+  --color-border: #334155;
+  --color-border-light: #1E293B;
+  --color-warning: #FBBF24;
+  --color-warning-pale: rgba(251, 191, 36, 0.15);
+  --color-warning-text: #FDE68A;
+  --color-error: #F87171;
+  --color-error-pale: rgba(248, 113, 113, 0.15);
+  --color-error-text: #FECACA;
+  --color-success: #4ADE80;
+  --color-success-pale: rgba(74, 222, 128, 0.15);
+  --color-success-text: #BBF7D0;
+  --color-info: #38BDF8;
+  --color-info-pale: rgba(56, 189, 248, 0.15);
+  --color-info-text: #BAE6FD;
+  
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.55);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Suppress click/mouse/touch generated focus outlines and shadows across interactive elements */
+:focus:not(:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--color-background);
+  color: var(--color-text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select,
+textarea,
+[role="button"],
+[tabindex] {
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Specific elements: remove outline and ring shadows when clicked by mouse */
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+select:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+[role="button"]:focus:not(:focus-visible),
+[tabindex]:focus:not(:focus-visible),
+summary:focus:not(:focus-visible),
+div:focus:not(:focus-visible),
+section:focus:not(:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Maintain accessible focus indicator when navigated via keyboard */
+:focus-visible {
+  outline: 2px solid var(--color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--color-primary) !important;
+  outline-offset: 2px !important;
+}
+
+/* Prevent unwanted outlines on non-keyboard active states */
+button:active:not(:focus-visible),
+a:active:not(:focus-visible),
+[role="button"]:active:not(:focus-visible),
+div:active:not(:focus-visible),
+section:active:not(:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+

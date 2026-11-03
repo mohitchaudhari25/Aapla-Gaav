@@ -7,6 +7,7 @@ import AppText from '../../components/ui/AppText';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 import { mockFunds } from '../../data/mockData';
 
 const formatCurrency = (amount) => {
@@ -16,6 +17,7 @@ const formatCurrency = (amount) => {
 
 export default function VillageFunds() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,48 +25,102 @@ export default function VillageFunds() {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
+      let channel = null;
+
       const fetchFunds = async () => {
         setLoading(true);
         setErrorMsg(null);
         try {
           const { data: { user } } = await supabase.auth.getUser();
+          let targetVillageId = null;
+
           if (user) {
             const { data: profile } = await supabase
               .from('profiles')
               .select('village_id')
               .eq('id', user.id)
-              .single();
-              
-            if (profile?.village_id) {
-              const { data, error } = await supabase
-                .from('fund_transactions')
-                .select('*')
-                .eq('village_id', profile.village_id)
-                .order('transaction_date', { ascending: false });
-                
-              if (error) {
-                setErrorMsg('निधीची माहिती मिळवण्यात त्रुटी आली.');
-              } else if (data) {
-                setTransactions([...data, ...mockFunds]);
-              }
-            } else {
-               setTransactions([...mockFunds]);
+              .maybeSingle();
+
+            targetVillageId = profile?.village_id;
+          }
+
+          if (!targetVillageId) {
+            const { data: defaultVillage } = await supabase
+              .from('villages')
+              .select('id')
+              .limit(1)
+              .maybeSingle();
+
+            if (defaultVillage) {
+              targetVillageId = defaultVillage.id;
             }
           }
+
+          const loadTransactions = async () => {
+            let query = supabase
+              .from('fund_transactions')
+              .select('*')
+              .order('transaction_date', { ascending: false });
+
+            if (targetVillageId) {
+              query = query.eq('village_id', targetVillageId);
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+              console.error('Funds fetch error:', error);
+              if (isMounted) setErrorMsg('निधीची माहिती मिळवण्यात त्रुटी आली.');
+            } else if (data && isMounted) {
+              if (data.length > 0) {
+                setTransactions(data);
+              } else if (!user) {
+                setTransactions(mockFunds);
+              } else {
+                setTransactions([]);
+              }
+            }
+          };
+
+          await loadTransactions();
+
+          // Realtime listener for live funds changes
+          channel = supabase
+            .channel('village-funds-changes')
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'fund_transactions',
+              },
+              () => {
+                loadTransactions();
+              }
+            )
+            .subscribe();
         } catch (error) {
-          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+          if (isMounted) setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
           console.error(error);
         } finally {
-          setLoading(false);
+          if (isMounted) setLoading(false);
         }
       };
-      
+
       fetchFunds();
+
+      return () => {
+        isMounted = false;
+        if (channel) {
+          supabase.removeChannel(channel);
+        }
+      };
     }, [])
   );
 
-  const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
-  const totalSpent = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+  const totalIncome = transactions.filter(t => (t.transaction_type || t.type) === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
+  const totalSpent = transactions.filter(t => (t.transaction_type || t.type) === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
   const remaining = totalIncome - totalSpent;
   const spendingPercentage = totalIncome > 0 ? Math.min((totalSpent / totalIncome) * 100, 100) : 0;
 
@@ -75,8 +131,8 @@ export default function VillageFunds() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <AppText variant="headingMedium">गावाचा पैसा कुठे खर्च होतो?</AppText>
-          <AppText variant="bodySmall" style={styles.subtitle}>गावाच्या विकासासाठी उपलब्ध आणि खर्च झालेल्या निधीची माहिती</AppText>
+          <AppText variant="headingMedium">{t('funds_spending_question')}</AppText>
+          <AppText variant="bodySmall" style={styles.subtitle}>{t('funds_spending_subtitle')}</AppText>
         </View>
       </View>
 
@@ -85,13 +141,13 @@ export default function VillageFunds() {
         {/* Total Funds Summary */}
         <View style={styles.summaryCard}>
           <View style={styles.mainAmountContainer}>
-            <AppText variant="label" style={styles.mainAmountLabel}>एकूण निधी (Income)</AppText>
+            <AppText variant="label" style={styles.mainAmountLabel}>{t('funds_total_income_label')}</AppText>
             <AppText variant="headingLarge" style={styles.mainAmount}>{formatCurrency(totalIncome)}</AppText>
           </View>
 
           <View style={styles.progressContainer}>
             <View style={styles.progressHeader}>
-              <AppText variant="label" style={styles.progressLabel}>खर्च: {spendingPercentage.toFixed(0)}%</AppText>
+              <AppText variant="label" style={styles.progressLabel}>{t('funds_spent_pct')} {spendingPercentage.toFixed(0)}%</AppText>
               <AppText variant="label" style={styles.progressLabel}>{formatCurrency(totalSpent)} / {formatCurrency(totalIncome)}</AppText>
             </View>
             <View style={styles.progressBarBg}>
@@ -103,21 +159,21 @@ export default function VillageFunds() {
             <View style={styles.splitItem}>
               <View style={[styles.dot, { backgroundColor: colors.error }]} />
               <View>
-                <AppText variant="label" style={styles.splitLabel}>खर्च झालेला निधी</AppText>
+                <AppText variant="label" style={styles.splitLabel}>{t('funds_spent_label')}</AppText>
                 <AppText variant="headingSmall" style={styles.splitValue}>{formatCurrency(totalSpent)}</AppText>
               </View>
             </View>
             <View style={styles.splitItem}>
               <View style={[styles.dot, { backgroundColor: colors.primary }]} />
               <View>
-                <AppText variant="label" style={styles.splitLabel}>शिल्लक निधी</AppText>
+                <AppText variant="label" style={styles.splitLabel}>{t('funds_remaining_label')}</AppText>
                 <AppText variant="headingSmall" style={styles.splitValue}>{formatCurrency(remaining)}</AppText>
               </View>
             </View>
           </View>
         </View>
 
-        <AppText variant="headingSmall" style={styles.sectionTitle}>निधी व्यवहार (Transactions)</AppText>
+        <AppText variant="headingSmall" style={styles.sectionTitle}>{t('funds_transactions_title')}</AppText>
         
         {loading ? (
           <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />
@@ -126,28 +182,31 @@ export default function VillageFunds() {
         ) : transactions.length === 0 ? (
           <EmptyState title="सध्या निधीची माहिती उपलब्ध नाही." />
         ) : (
-          transactions.map((tx) => (
-            <View 
-              key={tx.id}
-              style={styles.projectCard}
-            >
-              <View style={styles.projectHeader}>
-                <View style={[styles.projectIconWrapper, { backgroundColor: tx.type === 'income' ? colors.success + '20' : colors.error + '20' }]}>
-                  <Ionicons name={tx.type === 'income' ? 'arrow-down-outline' : 'arrow-up-outline'} size={20} color={tx.type === 'income' ? colors.success : colors.error} />
+          transactions.map((tx) => {
+            const isIncome = (tx.transaction_type || tx.type) === 'income';
+            return (
+              <View 
+                key={tx.id}
+                style={styles.projectCard}
+              >
+                <View style={styles.projectHeader}>
+                  <View style={[styles.projectIconWrapper, { backgroundColor: isIncome ? colors.success + '20' : colors.error + '20' }]}>
+                    <Ionicons name={isIncome ? 'arrow-down-outline' : 'arrow-up-outline'} size={20} color={isIncome ? colors.success : colors.error} />
+                  </View>
+                  <AppText variant="headingSmall" style={styles.projectName}>{tx.description}</AppText>
                 </View>
-                <AppText variant="headingSmall" style={styles.projectName}>{tx.description}</AppText>
+                
+                <View style={styles.projectAmounts}>
+                  <AppText variant="bodyMedium" style={[styles.projectSpent, { color: isIncome ? colors.success : colors.error }]}>
+                    {isIncome ? '+' : '-'}{formatCurrency(tx.amount)}
+                  </AppText>
+                  <AppText variant="label" style={styles.projectBudget}>
+                    {tx.transaction_date ? new Date(tx.transaction_date).toLocaleDateString('en-GB') : '-'}
+                  </AppText>
+                </View>
               </View>
-              
-              <View style={styles.projectAmounts}>
-                <AppText variant="bodyMedium" style={[styles.projectSpent, { color: tx.type === 'income' ? colors.success : colors.error }]}>
-                  {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
-                </AppText>
-                <AppText variant="label" style={styles.projectBudget}>
-                  {new Date(tx.transaction_date).toLocaleDateString('en-GB')}
-                </AppText>
-              </View>
-            </View>
-          ))
+            );
+          })
         )}
 
       </ScrollView>

@@ -8,49 +8,69 @@ import ProjectCard from '../../components/cards/ProjectCard';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing, radius } from '../../constants';
 import { supabase } from '../../lib/supabase';
-import { mockProjects } from '../../data/mockData';
+import { useTranslation } from 'react-i18next';
 
 export default function Projects() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
 
+  const fetchProjects = async () => {
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      let villageId = null;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('village_id')
+          .eq('id', user.id)
+          .maybeSingle();
+        villageId = profile?.village_id;
+      }
+
+      if (!villageId) {
+        const { data: vList } = await supabase.from('villages').select('id').limit(1);
+        if (vList && vList.length > 0) villageId = vList[0].id;
+      }
+          
+      let query = supabase.from('projects').select('*');
+      if (villageId) {
+        query = query.or(`village_id.eq.${villageId},village_id.is.null`);
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) {
+        setErrorMsg('विकास कामाची माहिती मिळवण्यात त्रुटी आली.');
+      } else {
+        setProjects(data || []);
+      }
+    } catch (error) {
+      setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
-      const fetchProjects = async () => {
-        setLoading(true);
-        setErrorMsg(null);
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('village_id')
-              .eq('id', user.id)
-              .single();
-              
-            let query = supabase.from('projects').select('*');
-            if (profile?.village_id) {
-              query = query.eq('village_id', profile.village_id);
-            }
-            const { data, error } = await query;
-              if (error) {
-              setErrorMsg('विकास कामाची माहिती मिळवण्यात त्रुटी आली.');
-            } else if (data) {
-              setProjects([...data, ...mockProjects]);
-            }
-          }
-        } catch (error) {
-          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
-          console.error(error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      
+      let isMounted = true;
       fetchProjects();
+
+      const projectsChannel = supabase.channel('projects-realtime-feed')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
+          if (isMounted) fetchProjects();
+        })
+        .subscribe();
+
+      return () => {
+        isMounted = false;
+        supabase.removeChannel(projectsChannel);
+      };
     }, [])
   );
 
@@ -65,8 +85,8 @@ export default function Projects() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <AppText variant="headingMedium">विकास कामे</AppText>
-          <AppText variant="bodySmall" style={styles.subtitle}>गावात सुरू असलेल्या आणि पूर्ण झालेल्या विकास कामांची माहिती</AppText>
+          <AppText variant="headingMedium">{t('projects_title')}</AppText>
+          <AppText variant="bodySmall" style={styles.subtitle}>{t('projects_subtitle')}</AppText>
         </View>
       </View>
 
@@ -74,17 +94,17 @@ export default function Projects() {
         <View style={styles.summaryContainer}>
           <View style={styles.summaryItem}>
             <AppText variant="headingSmall" style={styles.summaryValue}>{totalProjects}</AppText>
-            <AppText variant="label" style={styles.summaryLabel}>एकूण कामे</AppText>
+            <AppText variant="label" style={styles.summaryLabel}>{t('total_projects')}</AppText>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <AppText variant="headingSmall" style={[styles.summaryValue, { color: colors.info }]}>{ongoingProjects}</AppText>
-            <AppText variant="label" style={styles.summaryLabel}>चालू</AppText>
+            <AppText variant="label" style={styles.summaryLabel}>{t('ongoing_projects')}</AppText>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <AppText variant="headingSmall" style={[styles.summaryValue, { color: colors.primary }]}>{completedProjects}</AppText>
-            <AppText variant="label" style={styles.summaryLabel}>पूर्ण</AppText>
+            <AppText variant="label" style={styles.summaryLabel}>{t('completed_projects')}</AppText>
           </View>
         </View>
       )}
@@ -95,7 +115,7 @@ export default function Projects() {
         <EmptyState title={errorMsg} />
       ) : totalProjects === 0 ? (
         <EmptyState 
-          title="सध्या कोणतीही विकास कामे उपलब्ध नाहीत." 
+          title={t('no_projects_available')} 
         />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

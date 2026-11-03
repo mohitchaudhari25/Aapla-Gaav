@@ -10,9 +10,11 @@ import { colors, spacing } from '../../constants';
 import { DEMO_CONTACTS } from '../../data/contacts';
 import { supabase } from '../../lib/supabase';
 import { mockContacts } from '../../data/mockData';
+import { useTranslation } from 'react-i18next';
 
 export default function Contacts() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   const emergencyContacts = DEMO_CONTACTS?.filter(c => c.type === 'emergency') || [];
   const [villageContacts, setVillageContacts] = useState([]);
@@ -21,45 +23,93 @@ export default function Contacts() {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
+      let channel = null;
+
       const fetchContacts = async () => {
         setLoading(true);
         setErrorMsg(null);
         try {
           const { data: { user } } = await supabase.auth.getUser();
+          let targetVillageId = null;
+
           if (user) {
             const { data: profile } = await supabase
               .from('profiles')
               .select('village_id')
               .eq('id', user.id)
-              .single();
+              .maybeSingle();
 
-            if (profile?.village_id) {
-              const { data, error } = await supabase
-                .from('contacts')
-                .select('*')
-                .eq('village_id', profile.village_id)
-                .eq('type', 'village'); // optional depending on if we have types
-
-              if (error) {
-                setErrorMsg('संपर्क माहिती मिळवण्यात त्रुटी आली.');
-              } else if (data) {
-                setVillageContacts([...data, ...mockContacts]);
-              }
-            } else {
-               setVillageContacts([...mockContacts]);
-            }
-          } else {
-             setErrorMsg('कृपया लॉगिन करा.');
+            targetVillageId = profile?.village_id;
           }
+
+          if (!targetVillageId) {
+            const { data: defaultVillage } = await supabase
+              .from('villages')
+              .select('id')
+              .limit(1)
+              .maybeSingle();
+
+            if (defaultVillage) {
+              targetVillageId = defaultVillage.id;
+            }
+          }
+
+          const loadContacts = async () => {
+            let query = supabase.from('contacts').select('*');
+            if (targetVillageId) {
+              query = query.eq('village_id', targetVillageId);
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+              console.error('Contacts fetch error:', error);
+              if (isMounted) setErrorMsg('संपर्क माहिती मिळवण्यात त्रुटी आली.');
+            } else if (data && isMounted) {
+              if (data.length > 0) {
+                setVillageContacts(data);
+              } else if (!user) {
+                setVillageContacts(mockContacts);
+              } else {
+                setVillageContacts([]);
+              }
+            }
+          };
+
+          await loadContacts();
+
+          // Realtime listener for contacts changes
+          channel = supabase
+            .channel('contacts-channel')
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'contacts',
+              },
+              () => {
+                loadContacts();
+              }
+            )
+            .subscribe();
         } catch (error) {
-          setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
+          if (isMounted) setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
           console.error(error);
         } finally {
-          setLoading(false);
+          if (isMounted) setLoading(false);
         }
       };
 
       fetchContacts();
+
+      return () => {
+        isMounted = false;
+        if (channel) {
+          supabase.removeChannel(channel);
+        }
+      };
     }, [])
   );
 
@@ -70,8 +120,8 @@ export default function Contacts() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <AppText variant="headingMedium">महत्त्वाचे संपर्क</AppText>
-          <AppText variant="bodySmall" style={styles.subtitle}>गावातील महत्त्वाचे संपर्क आणि आपत्कालीन क्रमांक</AppText>
+          <AppText variant="headingMedium">{t('contacts_title')}</AppText>
+          <AppText variant="bodySmall" style={styles.subtitle}>{t('contacts_subtitle')}</AppText>
         </View>
       </View>
 
@@ -80,13 +130,13 @@ export default function Contacts() {
       ) : errorMsg ? (
         <EmptyState title={errorMsg} />
       ) : (emergencyContacts.length === 0 && villageContacts.length === 0) ? (
-        <EmptyState title="सध्या कोणतीही संपर्क माहिती उपलब्ध नाही." />
+        <EmptyState title={t('no_contacts_available')} />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           
           {emergencyContacts.length > 0 && (
             <View style={styles.section}>
-              <AppText variant="headingSmall" style={styles.sectionTitle}>आपत्कालीन संपर्क</AppText>
+              <AppText variant="headingSmall" style={styles.sectionTitle}>{t('emergency_contacts')}</AppText>
               {emergencyContacts.map((contact) => (
                 <ContactCard 
                   key={contact.id}

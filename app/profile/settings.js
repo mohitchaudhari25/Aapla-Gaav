@@ -5,6 +5,7 @@ import ScreenContainer from '../../components/common/ScreenContainer';
 import AppText from '../../components/ui/AppText';
 import { spacing, radius } from '../../constants';
 import { useTranslation } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useThemeContext, useAppTheme } from '../../lib/ThemeContext';
 
 export default function SettingsScreen() {
@@ -17,6 +18,7 @@ export default function SettingsScreen() {
 
   const changeLanguage = (lang) => {
     i18n.changeLanguage(lang);
+    AsyncStorage.setItem('user-language', lang);
   };
 
   return (

@@ -8,6 +8,7 @@ import NotificationCard from '../../components/cards/NotificationCard';
 import EmptyState from '../../components/common/EmptyState';
 import { colors, spacing } from '../../constants';
 import { supabase } from '../../lib/supabase';
+import { useTranslation } from 'react-i18next';
 import { mockNotifications } from '../../data/mockData';
 
 export default function Notifications() {
@@ -18,37 +19,69 @@ export default function Notifications() {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
+      let channel = null;
+
+      const fetchNotifications = async () => {
+        setLoading(true);
+        setErrorMsg(null);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const loadNotifs = async () => {
+              const { data, error } = await supabase
+                .from('notifications')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+
+              if (error) {
+                console.error('Notifications fetch error:', error);
+                if (isMounted) setErrorMsg(t('notices_load_error', 'सूचना मिळवण्यात त्रुटी आली.'));
+              } else if (data && isMounted) {
+                setNotifications(data);
+              }
+            };
+
+            await loadNotifs();
+
+            // Realtime subscription for instant citizen alerts
+            channel = supabase
+              .channel(`user-notifications-${user.id}`)
+              .on(
+                'postgres_changes',
+                {
+                  event: '*',
+                  schema: 'public',
+                  table: 'notifications',
+                  filter: `user_id=eq.${user.id}`,
+                },
+                () => {
+                  loadNotifs();
+                }
+              )
+              .subscribe();
+          } else {
+            if (isMounted) setNotifications(mockNotifications);
+          }
+        } catch (error) {
+          if (isMounted) setErrorMsg(t('error_unexpected', 'काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.'));
+          console.error(error);
+        } finally {
+          if (isMounted) setLoading(false);
+        }
+      };
+
       fetchNotifications();
+
+      return () => {
+        isMounted = false;
+        if (channel) {
+          supabase.removeChannel(channel);
+        }
+      };
     }, [])
   );
-
-  const fetchNotifications = async () => {
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data, error } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (error) {
-          setErrorMsg('सूचना मिळवण्यात त्रुटी आली.');
-        } else if (data) {
-          setNotifications([...data, ...mockNotifications]);
-        }
-      } else {
-        setNotifications([...mockNotifications]); // Show demo notifications even if not logged in
-      }
-    } catch (error) {
-      setErrorMsg('काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleNotificationPress = async (notification) => {
     if (!notification.is_read) {
@@ -102,8 +135,8 @@ export default function Notifications() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTextContainer}>
-          <AppText variant="headingMedium">सूचना</AppText>
-          <AppText variant="bodySmall" style={styles.subtitle}>तुमच्या गावातील महत्त्वाच्या अपडेट्स</AppText>
+          <AppText variant="headingMedium">{t('notifications_title', 'सूचना')}</AppText>
+          <AppText variant="bodySmall" style={styles.subtitle}>{t('notifications_subtitle', 'तुमच्या गावातील महत्त्वाच्या अपडेट्स')}</AppText>
         </View>
         {unreadCount > 0 && (
           <TouchableOpacity onPress={markAllAsRead} style={styles.markAllButton}>
@@ -118,7 +151,7 @@ export default function Notifications() {
         <EmptyState title={errorMsg} />
       ) : (!notifications || notifications.length === 0) ? (
         <EmptyState 
-          title="सध्या कोणत्याही नवीन सूचना नाहीत." 
+          title={t('no_notifications_title', 'सध्या कोणत्याही नवीन सूचना नाहीत.')} 
         />
       ) : (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
